@@ -9,9 +9,6 @@
 
 #include "ws2812.h"  // include header file
 //----------------------------------------------------------------------------
-// Timer handle
-extern TIM_HandleTypeDef htim2;
-//----------------------------------------------------------------------------
 // DMA Buffer
 uint16_t BUF_DMA[ARRAY_LEN] = { 0 };
 
@@ -65,7 +62,7 @@ void led_clear(void) {
 
 // Function to recieve DMA buffer to timer PWM
 void led_show(void) {
-	HAL_TIM_PWM_Start_DMA(&htim2, TIM_CHANNEL_2, (uint32_t*) &BUF_DMA,
+	HAL_TIM_PWM_Start_DMA(&TIM_HANDLE, TIM_CH, (uint32_t*) &BUF_DMA,
 			ARRAY_LEN);
 }
 
