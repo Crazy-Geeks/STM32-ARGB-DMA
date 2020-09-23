@@ -50,4 +50,4 @@ void DMA1_Channel7_IRQHandler(void){
 **Special thanks** to: *NarodStream*    
 [**Original code**](https://narodstream.ru/stm-urok-119-ws2812b-lenta-na-umnyx-svetodiodax-rgb-chast-2/)    
 
-**Donate:** [PayPal](paypal.me/yasnosos) / [DonationAlerts](https://www.donationalerts.com/r/yasnosos)
+**Donate:** [PayPal](https://paypal.me/yasnosos) / [DonationAlerts](https://www.donationalerts.com/r/yasnosos)
