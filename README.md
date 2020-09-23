@@ -1,7 +1,17 @@
 ## STM32-WS2812B-DMA
  Fastest and simpliest library for *WS2812b* for *STM32* Series. Uses *DMA* and *PWM* to control LED Strip
+ 
+### Function reference:
+```c
+void led_init(void);		// Initalization
+void led_set(uint8_t Rpixel, uint8_t Gpixel, uint8_t Bpixel, uint16_t posX);  // Draw pixel in X position by RGB
+void led_fill (uint8_t Rpix, uint8_t Gpix, uint8_t Bpix);	// Fill all the strip with color
+void led_clear(void);	// Fill strip with black
+void led_show(void);	// Recieve DMA Buffer to strip
+```
 
 ### Instructions for use: 
+> Also available in PDF
 - Use *CubeMX* to configure clocks and peripheral. You need to get **72 MHz** for timer clock (ABPx)    
 **TIM1**, **TIM8**-**TIM11** uses **ABP2**    
 **TIM2**-**TIM7**, **TIM12**-**TIM14** uses **ABP1**
@@ -33,7 +43,7 @@ void DMA1_Channel7_IRQHandler(void){
 #include "ws2812.h"
 /* USER CODE END Includes */
 ```
-- Open **ws2812.h** file and edit your parameters in **21 string**.
+- Open **ws2812.h** file and edit your parameters in **22 string**.
 - Now it is ready to work!    
     
     
