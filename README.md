@@ -11,7 +11,7 @@ void led_show(void);	// Recieve DMA Buffer to strip
 ```
 
 ### Instructions for use: 
-> Also available in PDF
+> Also available in PDF (RU/EN)
 - Use *CubeMX* to configure clocks and peripheral. You need to get **72 MHz** for timer clock (ABPx)    
 **TIM1**, **TIM8**-**TIM11** uses **ABP2**    
 **TIM2**-**TIM7**, **TIM12**-**TIM14** uses **ABP1**
