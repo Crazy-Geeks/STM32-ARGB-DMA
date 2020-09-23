@@ -5,6 +5,7 @@
  *      Author: Dmitriy Semenov
  *		Github: https://github.com/Crazy-Geeks/STM32-WS2812B-DMA
  *		License: MIT
+ *		(c) #Crazy_Geeks
  */
 
 #ifndef SRC_WS2812_H_
