@@ -44,6 +44,11 @@ void DMA1_Channel7_IRQHandler(void){
 /* USER CODE END Includes */
 ```
 - Open **ws2812.h** file and edit your parameters in **22 string**.
+- Add timer pwm start api with dma as follows (after initailising all peripheral and before while loop in main.c):
+ ```c
+ BUF_DMA[0] = 26;
+ HAL_TIM_PWM_Start_DMA(&htim2,TIM_CHANNEL_2,(uint32_t*)&BUF_DMA,1);
+ ```
 - Now it is ready to work!    
     
     
