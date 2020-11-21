@@ -38,7 +38,7 @@ extern TIM_HandleTypeDef TIM_HANDLE;		// Initalization of timer handler
 //--------------------------------------------------
 
 void led_init(void);		// Initalization
-void led_set(uint8_t Rpixel , uint8_t Gpixel, uint8_t Bpixel, uint16_t posX);  // Draw pixel in X position by RGB
+void set_led(uint8_t Rpixel , uint8_t Gpixel, uint8_t Bpixel, uint16_t posX);  // Draw pixel in X position by RGB
 void led_fill (uint8_t Rpix, uint8_t Gpix, uint8_t Bpix);	// Fill strip with color
 void led_clear(void);	// Fill strip with black
 void led_show(void);	// Recieve DMA Buffer to strip
