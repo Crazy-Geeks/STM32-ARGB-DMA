@@ -1,9 +1,11 @@
 /*
  * ws2812.h
  *
- *  Created on: September 21, 2020
+ *  Created on: May 04, 2021
  *      Author: Dmitriy Semenov
- *		Github: https://github.com/Crazy-Geeks/STM32-WS2812B-DMA
+ *      Github: https://github.com/Crazy-Geeks/STM32-WS2812B-DMA
+ *      Main idea: Frank VFD
+ *		Main repo: https://github.com/hey-frnk/STM32_HAL_NeoPixel
  *		License: MIT
  *		(c) #Crazy_Geeks
  */
@@ -14,32 +16,38 @@
 //--------------------------------------------------
 /*INCLUDES*/
 #include "stm32f1xx_hal.h"
-#include "main.h"
-#include <string.h>
-#include <stdlib.h>
-#include <stdint.h>
-//--------------------------------------------------
-/*USR SETTINGS*/
-#define LED_COUNT 12						// Count of led in your strip (LED_COUNT%12 = 0)
-#define BRIGHT 10 							// 0-255
-#define TIM_HANDLE	htim2					// use "htimX", where X is number of ur timer
-#define TIM_CH	TIM_CHANNEL_2				// use "TIM_CHANNEL_X", where X is number of ur channel
-//--------------------------------------------------
-/*SYS DEFINES*/
-#define DELAY_LEN 48						// Delay period
-#define ARRAY_LEN DELAY_LEN + LED_COUNT*24	// Length of DMA Buffer
-#define HIGH 65								// HIGH Byte period
-#define LOW 26								// LOW Byte period
-extern TIM_HandleTypeDef TIM_HANDLE;		// Initalization of timer handler
-//--------------------------------------------------
+#include "libs.h"
 
-//--------------------------------------------------
-#define BitIsSet(reg, bit) ((reg & (1<<bit)) != 0)	// Search Bit in integer
-//--------------------------------------------------
+#define NUM_PIXELS 24			// length of your strip
+#define RGB 					// define RGB or RGBW
+#define USE_GAMMA_CORRECTION 0	// corrects red & green color, try for your strip
 
-void led_init(void);		// Initalization
-void set_led(uint8_t Rpixel , uint8_t Gpixel, uint8_t Bpixel, uint16_t posX);  // Draw pixel in X position by RGB
-void led_fill (uint8_t Rpix, uint8_t Gpix, uint8_t Bpix);	// Fill strip with color
+/* Will be fixed in future versions */
+//#define USE_HSV_FLOAT 0			// uses float model for HSV
+/* NOTE! Float HSV model is smoother, but it perfomance only if you have FPU */
+
+/* TIMER */
+#define TIM_HANDLE  htim2				// Select your timer
+#define TIM_NUM		2
+#define TIM_POINTER TIM2
+/* TIMER CHANNEL */
+#define TIM_CH	   TIM_CHANNEL_2
+/* DMA CHANNEL */
+#define DMA_HANDLE  hdma_tim2_ch2_ch4 	// search for it in main.c
+
+
+void led_init(void);	// Initalization
 void led_clear(void);	// Fill strip with black
-void led_show(void);	// Recieve DMA Buffer to strip
+void led_setRGB(uint16_t index, uint8_t r, uint8_t g, uint8_t b); 	// Set one pixel with RGB color
+void led_setHSV(uint16_t index, uint8_t hue, uint8_t sat, uint8_t val);	// Set one pixel with HSV color
+void led_setRGBW(uint16_t index, uint8_t r, uint8_t g, uint8_t b, uint8_t w); // Set one pixel with RGB color for RGBW strip
+void led_fillRGB(uint8_t r, uint8_t g, uint8_t b);	// Fill strip with RGB color
+void led_fillHSV(uint8_t hue, uint8_t sat, uint8_t val);	// Fill strip with HSV color
+void led_fillRGBW(uint8_t r, uint8_t g, uint8_t b, uint8_t w);	// Fill strip with RGB color for RGBW strip
+bool led_show(void);	// Send color buffer to the strip - use with while!
+
+
+
+//#define TIM_HANDLE ((TIM_HandleTypeDef *)TIM_NUM);
+
 #endif /* SRC_WS2812_H_ */
