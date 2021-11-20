@@ -2,7 +2,7 @@
  **Fastest** and **simplest** library for **ARGB LEDs**: *WS28xx* and *SK68xx* Series *RGB* or *RGBW* for *STM32* Series. 
 <br> Uses ***DMA Interrupts*** and ***PWM*** to control LED Strip
 
-> ###[RU Description](https://crazygeeks.ru/stm32-argb-lib )
+> ### [RU Description](https://crazygeeks.ru/stm32-argb-lib )
  
 ### Features:
 - Can be used for **addressable RGB** and **RGBW LED** strips
@@ -11,7 +11,7 @@
 - Supports ***RGB*** and ***HSV*** color models
 - Timer frequency **auto-calculation**
   
-###Lib settings
+### Lib settings
 ```c
 #define WS2811F  // Family: {WS2811S, WS2811F, WS2812, SK6812}
 // WS2811S — RGB, 400kHz;
@@ -91,5 +91,5 @@ DMA_HandleTypeDef hdma_tim2_ch2_ch4;  <-- THIS
 
 ### Donate options
 - [My Site (RU)](https://crazygeeks.ru/donate/ ) 
-- [PayPal](https://paypal.me/yasnosos ) -
+- [PayPal](https://paypal.me/yasnosos )
 - [DonationAlerts](https://www.donationalerts.com/r/yasnosos )
