@@ -1,7 +1,7 @@
 #include "ARGB.h"
 
 void main(void){
-	ARGB_Init();  // Initialization
+    ARGB_Init();  // Initialization
 
     ARGB_Clear(); // Clear stirp
     while (ARGB_Show() != ARGB_OK); // Update - Option 1
