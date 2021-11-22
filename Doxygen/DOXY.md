@@ -2,7 +2,7 @@
  **Fastest** and **simplest** library for **ARGB LEDs**: *WS28xx* and *SK68xx* Series *RGB* or *RGBW* for *STM32* Series. 
 <br> Uses ***DMA Interrupts*** and ***PWM*** to control LED Strip
 
-> ### [RU Description](https://crazygeeks.ru/stm32-argb-lib )
+> [RU Description](https://crazygeeks.ru/stm32-argb-lib )
  
 ### Features:
 - Can be used for **addressable RGB** and **RGBW LED** strips
@@ -53,7 +53,7 @@ ARGB_STATE ARGB_Show(void); // Push data to the strip
 ```
 
 ### Instructions for use: 
-> #### Also available in PDF (RU/EN)
+> Also available in PDF (RU/EN) - Search in repo
 - Use *CubeMX* to configure clocks and peripheral.
 - Enable *PWM Generation* for your preferred timer channel.
 - ***PWM Mode 1***,  ***OC Preload**: Enable*, ***Fast Mode**: Disable*, ***CH Polarity**: High*
@@ -70,7 +70,7 @@ DMA_HandleTypeDef hdma_tim2_ch2_ch4;  <-- THIS
 ```
 - Add this handler in **ARGB.h** file in **DMA HANDLE** define.
 - Set other defines with your settings.
-- Now we're ready to go!    
+- Now we're ready to go!
 
 ### TROUBLESHOOTING
 - **IF STRIP DOESN'T WORK**
