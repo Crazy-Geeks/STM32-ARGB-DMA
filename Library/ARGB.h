@@ -2,8 +2,8 @@
  *******************************************
  * @file    ARGB.h
  * @author  Dmitriy Semenov / Crazy_Geeks
- * @version 1.3
- * @date	01-November-2021
+ * @version 1.31
+ * @date	21-November-2021
  * @brief   Header file for ARGB (Adreassable RGB)
  *******************************************
  *
@@ -25,22 +25,19 @@
  * @{
  */
 
-#define WS2811F       ///< Family: {WS2811S, WS2811F, WS2812, SK6812}
+#define WS2812       ///< Family: {WS2811S, WS2811F, WS2812, SK6812}
 // WS2811S — RGB, 400kHz;
 // WS2811F — RGB, 800kHz;
 // WS2812  — GRB, 800kHz;
 // SK6812  — RGBW, 800kHz
 
-#define NUM_PIXELS 4 ///< Pixel quantity
+#define NUM_PIXELS 144 ///< Pixel quantity
 
 #define USE_GAMMA_CORRECTION 1 ///< Gamma-correction should fix red&green, try for yourself
 
-// Useful only in MCUs with FPU (F3 and greater) / NOT READY YET
-#define USE_HSV_FLOAT 0 ///< Use float in HSV model calculation
-
 #define TIM_NUM	   2  ///< Timer number
 #define TIM_CH	   TIM_CHANNEL_2  ///< Timer's PWM channel
-#define DMA_HANDLE hdma_tim2_ch2  ///< DMA Channel
+#define DMA_HANDLE hdma_tim2_ch2_ch4  ///< DMA Channel
 // DMA channel can be found in main.c / tim.c
 
 /// @}

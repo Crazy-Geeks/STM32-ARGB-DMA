@@ -70,7 +70,7 @@ DMA_HandleTypeDef hdma_tim2_ch2_ch4;  <-- THIS
 ```
 - Add this handler in **ARGB.h** file in **DMA HANDLE** define.
 - Set other defines with your settings.
-- Now we're ready to go!    
+- Now we're ready to go!
 
 ### TROUBLESHOOTING
 - **IF STRIP DOESN'T WORK**

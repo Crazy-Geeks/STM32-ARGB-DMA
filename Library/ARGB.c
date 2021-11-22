@@ -2,8 +2,8 @@
  *******************************************
  * @file    ARGB.c
  * @author  Dmitriy Semenov / Crazy_Geeks
- * @version 1.3
- * @date	01-November-2021
+ * @version 1.31
+ * @date	21-November-2021
  * @brief   Source file for ARGB (Adreassable RGB)
  *******************************************
  *
@@ -44,7 +44,7 @@
  */
 
 #include "ARGB.h"  // include header file
-#include "stm32g4xx_hal_tim.h" // Set your file
+#include "math.h"
 
 /**
  * @addtogroup ARGB_Driver
@@ -85,8 +85,8 @@
 extern TIM_HandleTypeDef (TIM_HANDLE);  ///< Timer handler
 extern DMA_HandleTypeDef (DMA_HANDLE);  ///< DMA handler
 
-volatile uint8_t PWM_HI;    ///< PWM Code HI Log.1 period
-volatile uint8_t PWM_LO;    ///< PWM Code LO Log.1 period
+volatile u8_t PWM_HI;    ///< PWM Code HI Log.1 period
+volatile u8_t PWM_LO;    ///< PWM Code LO Log.1 period
 
 #ifdef SK6812
 #define NUM_BYTES (4 * NUM_PIXELS) ///< Strip size in bytes
@@ -114,8 +114,6 @@ static void ARGB_TIM_DMADelayPulseCplt(DMA_HandleTypeDef *hdma);
 static void ARGB_TIM_DMADelayPulseHalfCplt(DMA_HandleTypeDef *hdma);
 /// @} //Private
 
-
-
 /**
  * @brief Init timer & prescalers
  * @param none
@@ -123,22 +121,15 @@ static void ARGB_TIM_DMADelayPulseHalfCplt(DMA_HandleTypeDef *hdma);
  */
 ARGB_STATE ARGB_Init(void) {
     /* Auto-calculation! */
-    uint32_t APBfq;                                 // clock frequencies
-    RCC_ClkInitTypeDef clk_obj;                 // clocks structure
-    uint32_t latency = FLASH_ACR_LATENCY_4WS;     // dummy hardcode
-    HAL_RCC_GetClockConfig(&clk_obj, &latency);  // get clocks table
-
-#ifdef APB2
-    APBfq = HAL_RCC_GetPCLK2Freq(); // get fq
-    if (clk_obj.APB2CLKDivider != RCC_HCLK_DIV1)  // if not divided to 1
-        APBfq *= 2;                                  // multiple to 2
-#endif
+    u32_t APBfq; // Clock freq
 #ifdef APB1
-    APBfq = HAL_RCC_GetPCLK1Freq(); // get fq
-    if (clk_obj.APB1CLKDivider != RCC_HCLK_DIV1)  // if not divided to 1
-        APBfq *= 2;                                  // multiple to 2
+    APBfq = HAL_RCC_GetPCLK1Freq();
+    APBfq *= (RCC->CFGR & RCC_CFGR_PPRE1) == 0 ? 1 : 2;
 #endif
-
+#ifdef APB2
+    APBfq = HAL_RCC_GetPCLK2Freq();
+    APBfq *= (RCC->CFGR & RCC_CFGR_PPRE2) == 0 ? 1 : 2;
+#endif
 #ifdef WS2811S
     APBfq /= (uint32_t) (400 * 1000);  // 400 KHz - 2.5us
 #else
@@ -146,26 +137,30 @@ ARGB_STATE ARGB_Init(void) {
 #endif
 
     TIM_HANDLE.Instance->PSC = 0;                        // dummy hardcode now
-    TIM_HANDLE.Instance->ARR = (uint16_t) (APBfq - 1);    // set timer prescaler
+    TIM_HANDLE.Instance->ARR = (uint16_t) (APBfq - 1);   // set timer prescaler
     TIM_HANDLE.Instance->EGR = 1;                        // update timer registers
 
-#ifdef WS2811F
-    PWM_HI = (u8_t) (APBfq * 0.48) - 1;     // Log.1 - 60% - 1.3us
-    PWM_LO = (u8_t) (APBfq * 0.20) - 1;     // Log.0 - 20% - 0.5us
-#else
-    PWM_HI = (u8_t) (APBfq * 0.85) - 1;	 // Log.1 - 85%
-    PWM_LO = (u8_t) (APBfq * 0.25) - 1;   // Log.0 - 25%
+#if defined(WS2811F) || defined(WS2811S)
+    PWM_HI = (u8_t) (APBfq * 0.48) - 1;     // Log.1 - 48% - 0.60us/1.2us
+    PWM_LO = (u8_t) (APBfq * 0.20) - 1;     // Log.0 - 20% - 0.25us/0.5us
 #endif
-
+#ifdef WS2812
+    PWM_HI = (u8_t) (APBfq * 0.56) - 1;     // Log.1 - 56% - 0.70us
+    PWM_LO = (u8_t) (APBfq * 0.28) - 1;     // Log.0 - 28% - 0.35us
+#endif
+#ifdef SK6812
+    PWM_HI = (u8_t) (APBfq * 0.48) - 1;     // Log.1 - 48% - 0.60us
+    PWM_LO = (u8_t) (APBfq * 0.24) - 1;     // Log.0 - 24% - 0.30us
+#endif
 
 //#if INV_SIGNAL
 //    TIM_POINTER->CCER |= TIM_CCER_CC2P; // set inv ch bit
 //#else
 //    TIM_POINTER->CCER &= ~TIM_CCER_CC2P;
 //#endif
-    ARGB_LOC_ST = ARGB_READY;
-    TIM_CCxChannelCmd(TIM_HANDLE.Instance, TIM_CH, TIM_CCx_ENABLE);
-    HAL_Delay(1);
+    ARGB_LOC_ST = ARGB_READY; // Set Ready Flag
+    TIM_CCxChannelCmd(TIM_HANDLE.Instance, TIM_CH, TIM_CCx_ENABLE); // Enable GPIO to IDLE state
+    HAL_Delay(1); // Make some delay
     return ARGB_OK;
 }
 
@@ -403,44 +398,98 @@ ARGB_STATE ARGB_Show(void) {
  * @{ */
 
 /**
- * @brief DMA Finished half buffer transmission callback
- * @param[in] htim Pointer to timer instance
-*/
-void HAL_TIM_PWM_PulseFinishedHalfCpltCallback(TIM_HandleTypeDef *htim) {
-    // if wrong DMA channel
-    if (htim->Instance != TIM_HANDLE.Instance) return;
+ * @brief Private method for gamma correction
+ * @param[in] x Param to scale
+ * @param[in] scale Scale coefficient
+ * @return Scaled value
+ */
+static inline u8_t scale8(u8_t x, u8_t scale) {
+    return ((uint16_t) x * scale) >> 8;
+}
 
-    // if data transfer
-    if (BUF_COUNTER < NUM_PIXELS) {
-        // fill first part of buffer
-        for (volatile u8_t i = 0; i < 8; i++) {
-#ifdef SK6812
-            PWM_BUF[i] = (((RGB_BUF[4 * BUF_COUNTER] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
-            PWM_BUF[i + 8] = (((RGB_BUF[4 * BUF_COUNTER + 1] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
-            PWM_BUF[i + 16] = (((RGB_BUF[4 * BUF_COUNTER + 2] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
-            PWM_BUF[i + 24] = (((RGB_BUF[4 * BUF_COUNTER + 3] << i) & 0x80) > 0)? PWM_HI : PWM_LO;
-#else
-            PWM_BUF[i] = (((RGB_BUF[3 * BUF_COUNTER] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
-            PWM_BUF[i + 8] = (((RGB_BUF[3 * BUF_COUNTER + 1] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
-            PWM_BUF[i + 16] = (((RGB_BUF[3 * BUF_COUNTER + 2] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
-#endif
-        }
-        BUF_COUNTER++;
-    } else if (BUF_COUNTER < NUM_PIXELS + 2) { // if RET transfer
-        memset((u8_t *) &PWM_BUF[0], 0, PWM_BUF_LEN / 2); // first part
-        BUF_COUNTER++;
+/**
+ * @brief Convert color in HSV to RGB
+ * @param[in] hue HUE (color) [0..255]
+ * @param[in] sat Saturation  [0..255]
+ * @param[in] val Value (brightness) [0..255]
+ * @param[out] _r Pointer to RED component value
+ * @param[out] _g Pointer to GREEN component value
+ * @param[out] _b Pointer to BLUE component value
+ */
+static void HSV2RGB(u8_t hue, u8_t sat, u8_t val, u8_t *_r, u8_t *_g, u8_t *_b) {
+    if (sat == 0) { // if white color
+        *_r = *_g = *_b = val;
+        return;
+    }
+
+    // Float is smoother but check for FPU (Floating point unit) in your MCU
+    // Otherwise it will take longer time in the code
+    // FPU is in: F3/L3 and greater
+    // Src: https://github.com/Inseckto/HSV-to-RGB
+    float h = (float)hue / 255;
+    float s = (float)sat / 255;
+    float v = (float)val / 255;
+
+    int i = (int)floor(h * 6);
+    float f = h * 6 - (float)i;
+    u8_t p = (u8_t)(v * (1 - s) * 255.0);
+    u8_t q = (u8_t)(v * (1 - f * s) * 255.0);
+    u8_t t = (u8_t)(v * (1 - (1 - f) * s)*255.0);
+
+    switch (i % 6) {
+
+    // Src: https://stackoverflow.com/questions/3018313
+//    uint8_t reg = hue / 43;
+//    uint8_t rem = (hue - (reg * 43)) * 6;
+//    uint8_t p = (val * (255 - sat)) >> 8;
+//    uint8_t q = (val * (255 - ((sat * rem) >> 8))) >> 8;
+//    uint8_t t = (val * (255 - ((sat * (255 - rem)) >> 8))) >> 8;
+//    switch (reg) {
+        case 0: *_r = val, *_g = t, *_b = p; break;
+        case 1: *_r = q, *_g = val, *_b = p; break;
+        case 2: *_r = p, *_g = val, *_b = t; break;
+        case 3: *_r = p, *_g = q, *_b = val; break;
+        case 4: *_r = t, *_g = p, *_b = val; break;
+        default: *_r = val, *_g = p, *_b = q; break;
     }
 }
 
 /**
- * @brief DMA Finished full buffer transmission callback
- * @param[in] htim Pointer to timer instance
- */
-void HAL_TIM_PWM_PulseFinishedCallback(TIM_HandleTypeDef *htim) {
-    // if wrong DMA channel
-    if (htim->Instance != TIM_HANDLE.Instance) return;
+  * @brief  TIM DMA Delay Pulse complete callback.
+  * @param  hdma pointer to DMA handle.
+  * @retval None
+  */
+static void ARGB_TIM_DMADelayPulseCplt(DMA_HandleTypeDef *hdma) {
+    TIM_HandleTypeDef *htim = (TIM_HandleTypeDef *) ((DMA_HandleTypeDef *) hdma)->Parent;
 
-    // if data transfer
+    if (hdma == htim->hdma[TIM_DMA_ID_CC1]) {
+        htim->Channel = HAL_TIM_ACTIVE_CHANNEL_1;
+
+        if (hdma->Init.Mode == DMA_NORMAL) {
+            TIM_CHANNEL_STATE_SET(htim, TIM_CHANNEL_1, HAL_TIM_CHANNEL_STATE_READY);
+        }
+    } else if (hdma == htim->hdma[TIM_DMA_ID_CC2]) {
+        htim->Channel = HAL_TIM_ACTIVE_CHANNEL_2;
+
+        if (hdma->Init.Mode == DMA_NORMAL) {
+            TIM_CHANNEL_STATE_SET(htim, TIM_CHANNEL_2, HAL_TIM_CHANNEL_STATE_READY);
+        }
+    } else if (hdma == htim->hdma[TIM_DMA_ID_CC3]) {
+        htim->Channel = HAL_TIM_ACTIVE_CHANNEL_3;
+
+        if (hdma->Init.Mode == DMA_NORMAL) {
+            TIM_CHANNEL_STATE_SET(htim, TIM_CHANNEL_3, HAL_TIM_CHANNEL_STATE_READY);
+        }
+    } else if (hdma == htim->hdma[TIM_DMA_ID_CC4]) {
+        htim->Channel = HAL_TIM_ACTIVE_CHANNEL_4;
+
+        if (hdma->Init.Mode == DMA_NORMAL) {
+            TIM_CHANNEL_STATE_SET(htim, TIM_CHANNEL_4, HAL_TIM_CHANNEL_STATE_READY);
+        }
+    } else {
+        /* nothing to do */
+    }
+// if data transfer
     if (BUF_COUNTER < NUM_PIXELS) {
         // fill second part of buffer
         for (volatile u8_t i = 0; i < 8; i++) {
@@ -491,154 +540,6 @@ void HAL_TIM_PWM_PulseFinishedCallback(TIM_HandleTypeDef *htim) {
         TIM_CHANNEL_STATE_SET(htim, TIM_CH, HAL_TIM_CHANNEL_STATE_READY);
         ARGB_LOC_ST = ARGB_READY;
     }
-}
-
-/**
- * @brief Private method for gamma correction
- * @param[in] x Param to scale
- * @param[in] scale Scale coefficient
- * @return Scaled value
- */
-static inline u8_t scale8(u8_t x, u8_t scale) {
-    return ((uint16_t) x * scale) >> 8;
-}
-
-/**
- * @brief Convert color in HSV to RGB
- * @param[in] hue HUE (color) [0..255]
- * @param[in] sat Saturation  [0..255]
- * @param[in] val Value (brightness) [0..255]
- * @param[out] _r Pointer to RED component value
- * @param[out] _g Pointer to GREEN component value
- * @param[out] _b Pointer to BLUE component value
- */
-static void HSV2RGB(u8_t hue, u8_t sat, u8_t val, u8_t *_r, u8_t *_g, u8_t *_b) {
-    /* Source:
-     * https://stackoverflow.com/questions/3018313/algorithm-to-convert-rgb-to-hsv-and-hsv-to-rgb-in-range-0-255-for-both
-     */
-
-    if (sat == 0) { // if white color
-        _r[0] = _g[0] = _b[0] = val;
-        return;
-    }
-
-#if USE_HSV_FLOAT  /* DOESN'T WORK NOW */
-    // Float is smoother but check for FPU (Floating point unit) in your MCU
-    // Otherwise it will take longer time in the code
-    // FPU is in: F3/L3 and greater
-    float _hue = (float) hue * (360.0f / 255.0f);
-    float _sat = (float) sat * (1.0f / 255.0f);
-    float _val = (float) val * (1.0f / 255.0f);
-
-    //float s = sat / 100;
-    //float v = val / 100;
-    float C = _sat * _val;
-    float X = C * (1 - abs(fmod(_hue / 60.0, 2) - 1));
-    float m = _val - C;
-    float r, g, b;
-    if (_hue >= 0 && _hue < 60) {
-        r = C, g = X, b = 0;
-    } else if (_hue >= 60 && _hue < 120) {
-        r = X, g = C, b = 0;
-    } else if (_hue >= 120 && _hue < 180) {
-        r = 0, g = C, b = X;
-    } else if (_hue >= 180 && _hue < 240) {
-        r = 0, g = X, b = C;
-    } else if (_hue >= 240 && _hue < 300) {
-        r = X, g = 0, b = C;
-    } else {
-        r = C, g = 0, b = X;
-    }
-    _r[0] = (r + m) * 255;
-    _g[0] = (g + m) * 255;
-    _b[0] = (b + m) * 255;
-#endif
-
-//#if !USE_HSV_FLOAT
-    uint8_t reg = hue / 43;
-    uint8_t rem = (hue - (reg * 43)) * 6;
-
-    uint8_t p = (val * (255 - sat)) >> 8;
-    uint8_t q = (val * (255 - ((sat * rem) >> 8))) >> 8;
-    uint8_t t = (val * (255 - ((sat * (255 - rem)) >> 8))) >> 8;
-
-    switch (reg) {
-        case 0:
-            _r[0] = val;
-            _g[0] = t;
-            _b[0] = p;
-            break;
-        case 1:
-            _r[0] = q;
-            _g[0] = val;
-            _b[0] = p;
-            break;
-        case 2:
-            _r[0] = p;
-            _g[0] = val;
-            _b[0] = t;
-            break;
-        case 3:
-            _r[0] = p;
-            _g[0] = q;
-            _b[0] = val;
-            break;
-        case 4:
-            _r[0] = t;
-            _g[0] = p;
-            _b[0] = val;
-            break;
-        default:
-            _r[0] = val;
-            _g[0] = p;
-            _b[0] = q;
-            break;
-    }
-//#endif
-
-}
-
-/**
-  * @brief  TIM DMA Delay Pulse complete callback.
-  * @param  hdma pointer to DMA handle.
-  * @retval None
-  */
-static void ARGB_TIM_DMADelayPulseCplt(DMA_HandleTypeDef *hdma) {
-    TIM_HandleTypeDef *htim = (TIM_HandleTypeDef *) ((DMA_HandleTypeDef *) hdma)->Parent;
-
-    if (hdma == htim->hdma[TIM_DMA_ID_CC1]) {
-        htim->Channel = HAL_TIM_ACTIVE_CHANNEL_1;
-
-        if (hdma->Init.Mode == DMA_NORMAL) {
-            TIM_CHANNEL_STATE_SET(htim, TIM_CHANNEL_1, HAL_TIM_CHANNEL_STATE_READY);
-        }
-    } else if (hdma == htim->hdma[TIM_DMA_ID_CC2]) {
-        htim->Channel = HAL_TIM_ACTIVE_CHANNEL_2;
-
-        if (hdma->Init.Mode == DMA_NORMAL) {
-            TIM_CHANNEL_STATE_SET(htim, TIM_CHANNEL_2, HAL_TIM_CHANNEL_STATE_READY);
-        }
-    } else if (hdma == htim->hdma[TIM_DMA_ID_CC3]) {
-        htim->Channel = HAL_TIM_ACTIVE_CHANNEL_3;
-
-        if (hdma->Init.Mode == DMA_NORMAL) {
-            TIM_CHANNEL_STATE_SET(htim, TIM_CHANNEL_3, HAL_TIM_CHANNEL_STATE_READY);
-        }
-    } else if (hdma == htim->hdma[TIM_DMA_ID_CC4]) {
-        htim->Channel = HAL_TIM_ACTIVE_CHANNEL_4;
-
-        if (hdma->Init.Mode == DMA_NORMAL) {
-            TIM_CHANNEL_STATE_SET(htim, TIM_CHANNEL_4, HAL_TIM_CHANNEL_STATE_READY);
-        }
-    } else {
-        /* nothing to do */
-    }
-
-#if (USE_HAL_TIM_REGISTER_CALLBACKS == 1)
-    htim->PWM_PulseFinishedCallback(htim);
-#else
-    HAL_TIM_PWM_PulseFinishedCallback(htim);
-#endif /* USE_HAL_TIM_REGISTER_CALLBACKS */
 
     htim->Channel = HAL_TIM_ACTIVE_CHANNEL_CLEARED;
 }
@@ -651,42 +552,43 @@ static void ARGB_TIM_DMADelayPulseCplt(DMA_HandleTypeDef *hdma) {
   */
 static void ARGB_TIM_DMADelayPulseHalfCplt(DMA_HandleTypeDef *hdma) {
     TIM_HandleTypeDef *htim = (TIM_HandleTypeDef *) ((DMA_HandleTypeDef *) hdma)->Parent;
+    // if wrong handlers
+    if (hdma != &DMA_HANDLE || htim != &TIM_HANDLE) return;
 
-    if (hdma == htim->hdma[TIM_DMA_ID_CC1]) {
-        htim->Channel = HAL_TIM_ACTIVE_CHANNEL_1;
-    } else if (hdma == htim->hdma[TIM_DMA_ID_CC2]) {
-        htim->Channel = HAL_TIM_ACTIVE_CHANNEL_2;
-    } else if (hdma == htim->hdma[TIM_DMA_ID_CC3]) {
-        htim->Channel = HAL_TIM_ACTIVE_CHANNEL_3;
-    } else if (hdma == htim->hdma[TIM_DMA_ID_CC4]) {
-        htim->Channel = HAL_TIM_ACTIVE_CHANNEL_4;
-    } else {
-        /* nothing to do */
-    }
-
-#if (USE_HAL_TIM_REGISTER_CALLBACKS == 1)
-    htim->PWM_PulseFinishedHalfCpltCallback(htim);
+    // if data transfer
+    if (BUF_COUNTER < NUM_PIXELS) {
+        // fill first part of buffer
+        for (volatile u8_t i = 0; i < 8; i++) {
+#ifdef SK6812
+            PWM_BUF[i] = (((RGB_BUF[4 * BUF_COUNTER] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
+            PWM_BUF[i + 8] = (((RGB_BUF[4 * BUF_COUNTER + 1] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
+            PWM_BUF[i + 16] = (((RGB_BUF[4 * BUF_COUNTER + 2] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
+            PWM_BUF[i + 24] = (((RGB_BUF[4 * BUF_COUNTER + 3] << i) & 0x80) > 0)? PWM_HI : PWM_LO;
 #else
-    HAL_TIM_PWM_PulseFinishedHalfCpltCallback(htim);
-#endif /* USE_HAL_TIM_REGISTER_CALLBACKS */
-
-    htim->Channel = HAL_TIM_ACTIVE_CHANNEL_CLEARED;
+            PWM_BUF[i] = (((RGB_BUF[3 * BUF_COUNTER] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
+            PWM_BUF[i + 8] = (((RGB_BUF[3 * BUF_COUNTER + 1] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
+            PWM_BUF[i + 16] = (((RGB_BUF[3 * BUF_COUNTER + 2] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
+#endif
+        }
+        BUF_COUNTER++;
+    } else if (BUF_COUNTER < NUM_PIXELS + 2) { // if RET transfer
+        memset((u8_t *) &PWM_BUF[0], 0, PWM_BUF_LEN / 2); // first part
+        BUF_COUNTER++;
+    }
 }
 
 /** @} */ // Private
 
 /** @} */ // Driver
 
+// Check strip type
 #if !(defined(SK6812) || defined(WS2811F) || defined(WS2811S) || defined(WS2812))
 #error INCORRECT LED TYPE
 #warning Set it from list in ARGB.h string 28
 #endif
 
+// Check channel
 #if !(TIM_CH == TIM_CHANNEL_1 || TIM_CH == TIM_CHANNEL_2 || TIM_CH == TIM_CHANNEL_3 || TIM_CH == TIM_CHANNEL_4)
-#error Wrong channel! Fix it in ARGB.h string 42
+#error Wrong channel! Fix it in ARGB.h string 38
 #warning If you shure, search and set TIM_CHANNEL by yourself
-#endif
-
-#if USE_HSV_FLOAT == 1
-#error SET USE_HSV_FLOAT to 0! ARGB.h string 39
 #endif
