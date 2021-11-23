@@ -2,6 +2,8 @@
  **Fastest** and **simplest** library for **ARGB LEDs**: *WS28xx* and *SK68xx* Series *RGB* or *RGBW* for *STM32* Series. 
 <br> Uses ***DMA Interrupts*** and ***PWM*** to control LED Strip
 
+![Banner](Resources/ARGB_Banner.png)
+
 > ### [RU Description](https://crazygeeks.ru/stm32-argb-lib )
  
 ### Features:
@@ -10,7 +12,10 @@
 - Uses standard neopixel's **800/400 KHz** protocol
 - Supports ***RGB*** and ***HSV*** color models
 - Timer frequency **auto-calculation**
-  
+
+### Limitations
+- Only supports **APBx frequency >32 MHz**. It's timers' limitations.
+
 ### Lib settings
 ```c
 #define WS2811F  // Family: {WS2811S, WS2811F, WS2812, SK6812}
@@ -52,8 +57,11 @@ ARGB_STATE ARGB_Ready(void); // Get DMA Ready state
 ARGB_STATE ARGB_Show(void); // Push data to the strip
 ```
 
+### Connection
+![Connection](Resources/ARGB_Scheme.png)
+
 ### Instructions for use: 
-> #### Also available in PDF (RU/EN)
+> #### [Also available in PDF (RU/EN)](https://github.com/Crazy-Geeks/STM32-ARGB-DMA/tree/master/Instructions )
 - Use *CubeMX* to configure clocks and peripheral.
 - Enable *PWM Generation* for your preferred timer channel.
 - ***PWM Mode 1***,  ***OC Preload**: Enable*, ***Fast Mode**: Disable*, ***CH Polarity**: High*
