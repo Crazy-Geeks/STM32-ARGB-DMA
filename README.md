@@ -85,6 +85,9 @@ DMA_HandleTypeDef hdma_tim2_ch2_ch4;  <-- THIS
     - You should **convert logic levels**
         - In **Push Pull** GPIO Mode use **SN74LVC** Translator
         - In **Open Drain** GPIO Mode use **1K PullUp** Resistor 
+    - Check HAL DMA Generation order. DMA_Init should be **higher** than TIM_Init
+![DMA_Order](Resources/DMA_Gen_Order.png)
+    
 - **COLOR NOISE**
     - Use _Logic Analyzer_ or _Oscilloscope_ to **measure** the signal, or just play with values
         - Correct timer values in **.c** file **152 string**
