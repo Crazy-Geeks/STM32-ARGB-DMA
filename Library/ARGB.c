@@ -2,8 +2,8 @@
  *******************************************
  * @file    ARGB.c
  * @author  Dmitriy Semenov / Crazy_Geeks
- * @version 1.31
- * @date	21-November-2021
+ * @version 1.32
+ * @date	17-February-2022
  * @brief   Source file for ARGB (Adreassable RGB)
  *******************************************
  *
@@ -100,7 +100,7 @@ volatile u8_t PWM_LO;    ///< PWM Code LO Log.1 period
 volatile u8_t RGB_BUF[NUM_BYTES] = {0,};
 
 /// Timer PWM value buffer
-volatile u8_t PWM_BUF[PWM_BUF_LEN] = {0,};
+volatile u32_t PWM_BUF[PWM_BUF_LEN] = {0,};
 /// PWM buffer iterator
 volatile u16_t BUF_COUNTER = 0;
 
@@ -335,6 +335,8 @@ ARGB_STATE ARGB_Show(void) {
 #endif
         }
 
+        //HAL_TIM_DMABurst_WriteStart(&TIM_HANDLE, TIM_DMABASE_ARR)
+
         HAL_StatusTypeDef DMA_Send_Stat = HAL_ERROR;
         while (DMA_Send_Stat != HAL_OK) {
 
@@ -353,7 +355,7 @@ ARGB_STATE ARGB_Show(void) {
 #define ARGB_TIM_DMA_CC TIM_DMA_CC1
 #define ARGB_TIM_CCR CCR1
 #elif TIM_CH == TIM_CHANNEL_2
-#define ARGB_TIM_DMA_ID TIM_DMA_ID_CC2
+            #define ARGB_TIM_DMA_ID TIM_DMA_ID_CC2
 #define ARGB_TIM_DMA_CC TIM_DMA_CC2
 #define ARGB_TIM_CCR CCR2
 #elif TIM_CH == TIM_CHANNEL_3
@@ -438,7 +440,7 @@ static void HSV2RGB(u8_t hue, u8_t sat, u8_t val, u8_t *_r, u8_t *_g, u8_t *_b) 
 
     switch (i % 6) {
 
-    // Src: https://stackoverflow.com/questions/3018313
+        // Src: https://stackoverflow.com/questions/3018313
 //    uint8_t reg = hue / 43;
 //    uint8_t rem = (hue - (reg * 43)) * 6;
 //    uint8_t p = (val * (255 - sat)) >> 8;
@@ -506,7 +508,7 @@ static void ARGB_TIM_DMADelayPulseCplt(DMA_HandleTypeDef *hdma) {
         }
         BUF_COUNTER++;
     } else if (BUF_COUNTER < NUM_PIXELS + 2) { // if RET transfer
-        memset((u8_t *) &PWM_BUF[PWM_BUF_LEN / 2], 0, PWM_BUF_LEN / 2); // second part
+        memset((u32_t *) &PWM_BUF[PWM_BUF_LEN / 2], 0, (PWM_BUF_LEN / 2)*sizeof(u32_t)); // second part
         BUF_COUNTER++;
     } else { // if END of transfer
         BUF_COUNTER = 0;
@@ -572,7 +574,7 @@ static void ARGB_TIM_DMADelayPulseHalfCplt(DMA_HandleTypeDef *hdma) {
         }
         BUF_COUNTER++;
     } else if (BUF_COUNTER < NUM_PIXELS + 2) { // if RET transfer
-        memset((u8_t *) &PWM_BUF[0], 0, PWM_BUF_LEN / 2); // first part
+        memset((u32_t*) &PWM_BUF[0], 0, (PWM_BUF_LEN / 2)*sizeof(u32_t)); // first part
         BUF_COUNTER++;
     }
 }
