@@ -435,7 +435,6 @@ static void HSV2RGB(u8_t hue, u8_t sat, u8_t val, u8_t *_r, u8_t *_g, u8_t *_b) 
     }
 }
 
-extern UART_HandleTypeDef huart1;
 /**
   * @brief  TIM DMA Delay Pulse complete callback.
   * @param  hdma pointer to DMA handle.
