@@ -60,24 +60,26 @@
 
 /// Timer handler
 #if TIM_NUM == 1
-#define TIM_HANDLE  htim1
+#define TIM_HANDLE  PWMD1
 #elif TIM_NUM == 2
-#define TIM_HANDLE  htim2
+#define TIM_HANDLE  PWMD2
 #elif TIM_NUM == 3
-#define TIM_HANDLE  htim3
+#define TIM_HANDLE  PWMD3
 #elif TIM_NUM == 4
-#define TIM_HANDLE  htim4
+#define TIM_HANDLE  PWMD4
 #elif TIM_NUM == 5
-#define TIM_HANDLE  htim5
+#define TIM_HANDLE  PWMD5
 #elif TIM_NUM == 8
-#define TIM_HANDLE  htim8
+#define TIM_HANDLE  PWMD8
+#elif TIM_NUM == 12
+#define TIM_HANDLE  PWMD12
 #else
 #error Wrong timer! Fix it in ARGB.h string 41
 #warning If you shure, set TIM_HANDLE and APB ring by yourself
 #endif
 
 /// Timer's RCC Bus
-#if TIM_NUM == 1 || (TIM_NUM >= 8 && TIM_NUM <= 11)
+#if TIM_NUM == 1 || (TIM_NUM >= 8 && TIM_NUM <= 12)
 #define APB1
 #else
 #define APB2
@@ -85,18 +87,15 @@
 
 /// DMA Size
 #if defined(DMA_SIZE_BYTE)
-typedef u8_t dma_siz;
+typedef uint8_t dma_siz;
 #elif defined(DMA_SIZE_HWORD)
-typedef u16_t dma_siz;
+typedef uint16_t dma_siz;
 #elif defined(DMA_SIZE_WORD)
-typedef u32_t dma_siz;
+typedef uint32_t dma_siz;
 #endif
 
-extern TIM_HandleTypeDef (TIM_HANDLE);  ///< Timer handler
-extern DMA_HandleTypeDef (DMA_HANDLE);  ///< DMA handler
-
-volatile u8_t PWM_HI;    ///< PWM Code HI Log.1 period
-volatile u8_t PWM_LO;    ///< PWM Code LO Log.1 period
+volatile uint8_t PWM_HI;    ///< PWM Code HI Log.1 period
+volatile uint8_t PWM_LO;    ///< PWM Code LO Log.1 period
 
 #ifdef SK6812
 #define NUM_BYTES (4 * NUM_PIXELS) ///< Strip size in bytes
@@ -107,21 +106,21 @@ volatile u8_t PWM_LO;    ///< PWM Code LO Log.1 period
 #endif
 
 /// Static LED buffer
-volatile u8_t RGB_BUF[NUM_BYTES] = {0,};
+volatile uint8_t RGB_BUF[NUM_BYTES] = {0,};
 
 /// Timer PWM value buffer
 volatile dma_siz PWM_BUF[PWM_BUF_LEN] = {0,};
 /// PWM buffer iterator
-volatile u16_t BUF_COUNTER = 0;
+volatile uint16_t BUF_COUNTER = 0;
 
-volatile u8_t ARGB_BR = 255;     ///< LED Global brightness
+volatile uint8_t ARGB_BR = 255;     ///< LED Global brightness
 volatile ARGB_STATE ARGB_LOC_ST; ///< Buffer send status
 
-static inline u8_t scale8(u8_t x, u8_t scale); // Gamma correction
-static void HSV2RGB(u8_t hue, u8_t sat, u8_t val, u8_t *_r, u8_t *_g, u8_t *_b);
+static inline uint8_t scale8(uint8_t x, uint8_t scale); // Gamma correction
+static void HSV2RGB(uint8_t hue, uint8_t sat, uint8_t val, uint8_t *_r, uint8_t *_g, uint8_t *_b);
 // Callbacks
-static void ARGB_TIM_DMADelayPulseCplt(DMA_HandleTypeDef *hdma);
-static void ARGB_TIM_DMADelayPulseHalfCplt(DMA_HandleTypeDef *hdma);
+static void ARGB_TIM_DMADelayPulseCplt(DMA_Stream_TypeDef *hdma);
+static void ARGB_TIM_DMADelayPulseHalfCplt(DMA_Stream_TypeDef *hdma);
 /// @} //Private
 
 /**
@@ -130,13 +129,13 @@ static void ARGB_TIM_DMADelayPulseHalfCplt(DMA_HandleTypeDef *hdma);
  */
 void ARGB_Init(void) {
     /* Auto-calculation! */
-    u32_t APBfq; // Clock freq
+    uint32_t APBfq; // Clock freq
 #ifdef APB1
-    APBfq = HAL_RCC_GetPCLK1Freq();
+    APBfq = STM32_PCLK1();
     APBfq *= (RCC->CFGR & RCC_CFGR_PPRE1) == 0 ? 1 : 2;
 #endif
 #ifdef APB2
-    APBfq = HAL_RCC_GetPCLK2Freq();
+    APBfq = STM32_PCLK2;
     APBfq *= (RCC->CFGR & RCC_CFGR_PPRE2) == 0 ? 1 : 2;
 #endif
 #ifdef WS2811S
@@ -144,20 +143,20 @@ void ARGB_Init(void) {
 #else
     APBfq /= (uint32_t) (800 * 1000);  // 800 KHz - 1.25us
 #endif
-    TIM_HANDLE.Instance->PSC = 0;                        // dummy hardcode now
-    TIM_HANDLE.Instance->ARR = (uint16_t) (APBfq - 1);   // set timer prescaler
-    TIM_HANDLE.Instance->EGR = 1;                        // update timer registers
+    TIM_HANDLE.tim->PSC = 0;                        // dummy hardcode now
+    TIM_HANDLE.tim->ARR = (uint16_t) (APBfq - 1);   // set timer prescaler
+    TIM_HANDLE.tim->EGR = 1;                        // update timer registers
 #if defined(WS2811F) || defined(WS2811S)
-    PWM_HI = (u8_t) (APBfq * 0.48) - 1;     // Log.1 - 48% - 0.60us/1.2us
-    PWM_LO = (u8_t) (APBfq * 0.20) - 1;     // Log.0 - 20% - 0.25us/0.5us
+    PWM_HI = (uint8_t) (APBfq * 0.48) - 1;     // Log.1 - 48% - 0.60us/1.2us
+    PWM_LO = (uint8_t) (APBfq * 0.20) - 1;     // Log.0 - 20% - 0.25us/0.5us
 #endif
 #ifdef WS2812
-    PWM_HI = (u8_t) (APBfq * 0.56) - 1;     // Log.1 - 56% - 0.70us
-    PWM_LO = (u8_t) (APBfq * 0.28) - 1;     // Log.0 - 28% - 0.35us
+    PWM_HI = (uint8_t) (APBfq * 0.56) - 1;     // Log.1 - 56% - 0.70us
+    PWM_LO = (uint8_t) (APBfq * 0.28) - 1;     // Log.0 - 28% - 0.35us
 #endif
 #ifdef SK6812
-    PWM_HI = (u8_t) (APBfq * 0.48) - 1;     // Log.1 - 48% - 0.60us
-    PWM_LO = (u8_t) (APBfq * 0.24) - 1;     // Log.0 - 24% - 0.30us
+    PWM_HI = (uint8_t) (APBfq * 0.48) - 1;     // Log.1 - 48% - 0.60us
+    PWM_LO = (uint8_t) (APBfq * 0.24) - 1;     // Log.0 - 24% - 0.30us
 #endif
 
 //#if INV_SIGNAL
@@ -166,8 +165,7 @@ void ARGB_Init(void) {
 //    TIM_POINTER->CCER &= ~TIM_CCER_CC2P;
 //#endif
     ARGB_LOC_ST = ARGB_READY; // Set Ready Flag
-    TIM_CCxChannelCmd(TIM_HANDLE.Instance, TIM_CH, TIM_CCx_ENABLE); // Enable GPIO to IDLE state
-    HAL_Delay(1); // Make some delay
+    // TIM_CCxChannelCmd(TIM_HANDLE.tim, TIM_CH, TIM_CCx_ENABLE); // Enable GPIO to IDLE state
 }
 
 /**
@@ -186,7 +184,7 @@ void ARGB_Clear(void) {
  * @brief Set GLOBAL LED brightness
  * @param[in] br Brightness [0..255]
  */
-void ARGB_SetBrightness(u8_t br) {
+void ARGB_SetBrightness(uint8_t br) {
     ARGB_BR = br;
 }
 
@@ -197,29 +195,29 @@ void ARGB_SetBrightness(u8_t br) {
  * @param[in] g Green component [0..255]
  * @param[in] b Blue component  [0..255]
  */
-void ARGB_SetRGB(u16_t i, u8_t r, u8_t g, u8_t b) {
+void ARGB_SetRGB(uint16_t i, uint8_t r, uint8_t g, uint8_t b) {
     // overflow protection
     if (i >= NUM_PIXELS) {
-        u16_t _i = i / NUM_PIXELS;
+        uint16_t _i = i / NUM_PIXELS;
         i -= _i * NUM_PIXELS;
     }
     // set brightness
-    r /= 256 / ((u16_t) ARGB_BR + 1);
-    g /= 256 / ((u16_t) ARGB_BR + 1);
-    b /= 256 / ((u16_t) ARGB_BR + 1);
+    r /= 256 / ((uint16_t) ARGB_BR + 1);
+    g /= 256 / ((uint16_t) ARGB_BR + 1);
+    b /= 256 / ((uint16_t) ARGB_BR + 1);
 #if USE_GAMMA_CORRECTION
     g = scale8(g, 0xB0);
     b = scale8(b, 0xF0);
 #endif
     // Subpixel chain order
 #if defined(SK6812) || defined(WS2811F) || defined(WS2811S)
-    const u8_t subp1 = r;
-    const u8_t subp2 = g;
-    const u8_t subp3 = b;
+    const uint8_t subp1 = r;
+    const uint8_t subp2 = g;
+    const uint8_t subp3 = b;
 #else
-    const u8_t subp1 = g;
-    const u8_t subp2 = r;
-    const u8_t subp3 = b;
+    const uint8_t subp1 = g;
+    const uint8_t subp2 = r;
+    const uint8_t subp3 = b;
 #endif
     // RGB or RGBW
 #ifdef SK6812
@@ -240,7 +238,7 @@ void ARGB_SetRGB(u16_t i, u8_t r, u8_t g, u8_t b) {
  * @param[in] sat Saturation  [0..255]
  * @param[in] val Value (brightness) [0..255]
  */
-void ARGB_SetHSV(u16_t i, u8_t hue, u8_t sat, u8_t val) {
+void ARGB_SetHSV(uint16_t i, uint8_t hue, uint8_t sat, uint8_t val) {
     uint8_t _r, _g, _b;                    // init buffer color
     HSV2RGB(hue, sat, val, &_r, &_g, &_b); // get RGB color
     ARGB_SetRGB(i, _r, _g, _b);     // set color
@@ -251,11 +249,11 @@ void ARGB_SetHSV(u16_t i, u8_t hue, u8_t sat, u8_t val) {
  * @param[in] i LED position
  * @param[in] w White component [0..255]
  */
-void ARGB_SetWhite(u16_t i, u8_t w) {
+void ARGB_SetWhite(uint16_t i, uint8_t w) {
 #ifdef RGB
     return;
 #endif
-    w /= 256 / ((u16_t) ARGB_BR + 1); // set brightness
+    w /= 256 / ((uint16_t) ARGB_BR + 1); // set brightness
     RGB_BUF[4 * i + 3] = w;                // set white part
 }
 
@@ -265,8 +263,8 @@ void ARGB_SetWhite(u16_t i, u8_t w) {
  * @param[in] g Green component [0..255]
  * @param[in] b Blue component  [0..255]
  */
-void ARGB_FillRGB(u8_t r, u8_t g, u8_t b) {
-    for (volatile u16_t i = 0; i < NUM_PIXELS; i++)
+void ARGB_FillRGB(uint8_t r, uint8_t g, uint8_t b) {
+    for (volatile uint16_t i = 0; i < NUM_PIXELS; i++)
         ARGB_SetRGB(i, r, g, b);
 }
 
@@ -276,7 +274,7 @@ void ARGB_FillRGB(u8_t r, u8_t g, u8_t b) {
  * @param[in] sat Saturation  [0..255]
  * @param[in] val Value (brightness) [0..255]
  */
-void ARGB_FillHSV(u8_t hue, u8_t sat, u8_t val) {
+void ARGB_FillHSV(uint8_t hue, uint8_t sat, uint8_t val) {
     uint8_t _r, _g, _b;                    // init buffer color
     HSV2RGB(hue, sat, val, &_r, &_g, &_b); // get color once (!)
     ARGB_FillRGB(_r, _g, _b);       // set color
@@ -286,8 +284,8 @@ void ARGB_FillHSV(u8_t hue, u8_t sat, u8_t val) {
  * @brief Set ALL White components in strip
  * @param[in] w White component [0..255]
  */
-void ARGB_FillWhite(u8_t w) {
-    for (volatile u16_t i = 0; i < NUM_PIXELS; i++)
+void ARGB_FillWhite(uint8_t w) {
+    for (volatile uint16_t i = 0; i < NUM_PIXELS; i++)
         ARGB_SetWhite(i, w);
 }
 
@@ -310,7 +308,7 @@ ARGB_STATE ARGB_Show(void) {
     if (BUF_COUNTER != 0 || DMA_HANDLE.State != HAL_DMA_STATE_READY) {
         return ARGB_BUSY;
     } else {
-        for (volatile u8_t i = 0; i < 8; i++) {
+        for (volatile uint8_t i = 0; i < 8; i++) {
             // set first transfer from first values
             PWM_BUF[i] = (((RGB_BUF[0] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
             PWM_BUF[i + 8] = (((RGB_BUF[1] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
@@ -354,17 +352,17 @@ ARGB_STATE ARGB_Show(void) {
             TIM_HANDLE.hdma[ARGB_TIM_DMA_ID]->XferCpltCallback = ARGB_TIM_DMADelayPulseCplt;
             TIM_HANDLE.hdma[ARGB_TIM_DMA_ID]->XferHalfCpltCallback = ARGB_TIM_DMADelayPulseHalfCplt;
             TIM_HANDLE.hdma[ARGB_TIM_DMA_ID]->XferErrorCallback = TIM_DMAError;
-            if (HAL_DMA_Start_IT(TIM_HANDLE.hdma[ARGB_TIM_DMA_ID], (u32_t) PWM_BUF,
-                                 (u32_t) &TIM_HANDLE.Instance->ARGB_TIM_CCR,
-                                 (u16_t) PWM_BUF_LEN) != HAL_OK) {
+            if (HAL_DMA_Start_IT(TIM_HANDLE.hdma[ARGB_TIM_DMA_ID], (uint32_t) PWM_BUF,
+                                 (uint32_t) &TIM_HANDLE.tim->ARGB_TIM_CCR,
+                                 (uint16_t) PWM_BUF_LEN) != HAL_OK) {
                 DMA_Send_Stat = HAL_ERROR;
                 continue;
             }
             __HAL_TIM_ENABLE_DMA(&TIM_HANDLE, ARGB_TIM_DMA_CC);
-            if (IS_TIM_BREAK_INSTANCE(TIM_HANDLE.Instance) != RESET)
+            if (IS_TIM_BREAK_INSTANCE(TIM_HANDLE.tim) != RESET)
                 __HAL_TIM_MOE_ENABLE(&TIM_HANDLE);
-            if (IS_TIM_SLAVE_INSTANCE(TIM_HANDLE.Instance)) {
-                u32_t tmpsmcr = TIM_HANDLE.Instance->SMCR & TIM_SMCR_SMS;
+            if (IS_TIM_SLAVE_INSTANCE(TIM_HANDLE.tim)) {
+                uint32_t tmpsmcr = TIM_HANDLE.tim->SMCR & TIM_SMCR_SMS;
                 if (!IS_TIM_SLAVEMODE_TRIGGER_ENABLED(tmpsmcr))
                     __HAL_TIM_ENABLE(&TIM_HANDLE);
             } else
@@ -386,7 +384,7 @@ ARGB_STATE ARGB_Show(void) {
  * @param[in] scale Scale coefficient
  * @return Scaled value
  */
-static inline u8_t scale8(u8_t x, u8_t scale) {
+static inline uint8_t scale8(uint8_t x, uint8_t scale) {
     return ((uint16_t) x * scale) >> 8;
 }
 
@@ -399,7 +397,7 @@ static inline u8_t scale8(u8_t x, u8_t scale) {
  * @param[out] _g Pointer to GREEN component value
  * @param[out] _b Pointer to BLUE component value
  */
-static void HSV2RGB(u8_t hue, u8_t sat, u8_t val, u8_t *_r, u8_t *_g, u8_t *_b) {
+static void HSV2RGB(uint8_t hue, uint8_t sat, uint8_t val, uint8_t *_r, uint8_t *_g, uint8_t *_b) {
     if (sat == 0) { // if white color
         *_r = *_g = *_b = val;
         return;
@@ -414,9 +412,9 @@ static void HSV2RGB(u8_t hue, u8_t sat, u8_t val, u8_t *_r, u8_t *_g, u8_t *_b) 
 
     int i = (int)floorf(h * 6);
     float f = h * 6 - (float)i;
-    u8_t p = (u8_t)(v * (1 - s) * 255.0);
-    u8_t q = (u8_t)(v * (1 - f * s) * 255.0);
-    u8_t t = (u8_t)(v * (1 - (1 - f) * s)*255.0);
+    uint8_t p = (uint8_t)(v * (1 - s) * 255.0);
+    uint8_t q = (uint8_t)(v * (1 - f * s) * 255.0);
+    uint8_t t = (uint8_t)(v * (1 - (1 - f) * s)*255.0);
 
     switch (i % 6) {
 // Src: https://stackoverflow.com/questions/3018313
@@ -440,8 +438,8 @@ static void HSV2RGB(u8_t hue, u8_t sat, u8_t val, u8_t *_r, u8_t *_g, u8_t *_b) 
   * @param  hdma pointer to DMA handle.
   * @retval None
   */
-static void ARGB_TIM_DMADelayPulseCplt(DMA_HandleTypeDef *hdma) {
-    TIM_HandleTypeDef *htim = (TIM_HandleTypeDef *) ((DMA_HandleTypeDef *) hdma)->Parent;
+static void ARGB_TIM_DMADelayPulseCplt(DMA_Stream_TypeDef *hdma) {
+    TIM_HandleTypeDef *htim = (TIM_HandleTypeDef *) ((DMA_Stream_TypeDef *) hdma)->Parent;
     // if wrong handlers
     if (hdma != &DMA_HANDLE || htim != &TIM_HANDLE) return;
     if (BUF_COUNTER == 0) return; // if no data to transmit - return
@@ -471,7 +469,7 @@ static void ARGB_TIM_DMADelayPulseCplt(DMA_HandleTypeDef *hdma) {
 // if data transfer
     if (BUF_COUNTER < NUM_PIXELS) {
         // fill second part of buffer
-        for (volatile u8_t i = 0; i < 8; i++) {
+        for (volatile uint8_t i = 0; i < 8; i++) {
 #ifdef SK6812
             PWM_BUF[i + 32] = (((RGB_BUF[4 * BUF_COUNTER] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
             PWM_BUF[i + 40] = (((RGB_BUF[4 * BUF_COUNTER + 1] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
@@ -524,15 +522,15 @@ static void ARGB_TIM_DMADelayPulseCplt(DMA_HandleTypeDef *hdma) {
   * @param  hdma pointer to DMA handle.
   * @retval None
   */
-static void ARGB_TIM_DMADelayPulseHalfCplt(DMA_HandleTypeDef *hdma) {
-    TIM_HandleTypeDef *htim = (TIM_HandleTypeDef *) ((DMA_HandleTypeDef *) hdma)->Parent;
+static void ARGB_TIM_DMADelayPulseHalfCplt(DMA_Stream_TypeDef *hdma) {
+    TIM_HandleTypeDef *htim = (TIM_HandleTypeDef *) ((DMA_Stream_TypeDef *) hdma)->Parent;
     // if wrong handlers
     if (hdma != &DMA_HANDLE || htim != &TIM_HANDLE) return;
     if (BUF_COUNTER == 0) return; // if no data to transmit - return
     // if data transfer
     if (BUF_COUNTER < NUM_PIXELS) {
         // fill first part of buffer
-        for (volatile u8_t i = 0; i < 8; i++) {
+        for (volatile uint8_t i = 0; i < 8; i++) {
 #ifdef SK6812
             PWM_BUF[i] = (((RGB_BUF[4 * BUF_COUNTER] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
             PWM_BUF[i + 8] = (((RGB_BUF[4 * BUF_COUNTER + 1] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
