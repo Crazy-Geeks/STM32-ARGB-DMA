@@ -305,7 +305,7 @@ ARGB_STATE ARGB_Ready(void) {
  */
 ARGB_STATE ARGB_Show(void) {
     ARGB_LOC_ST = ARGB_BUSY;
-    if (BUF_COUNTER != 0 || DMA_HANDLE.State != HAL_DMA_STATE_READY) {
+    if (BUF_COUNTER != 0){// || DMA_HANDLE.State != HAL_DMA_STATE_READY) {
         return ARGB_BUSY;
     } else {
         for (volatile uint8_t i = 0; i < 8; i++) {
@@ -321,17 +321,16 @@ ARGB_STATE ARGB_Show(void) {
             PWM_BUF[i + 56] = (((RGB_BUF[7] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
 #endif
         }
-        HAL_StatusTypeDef DMA_Send_Stat = HAL_ERROR;
-        while (DMA_Send_Stat != HAL_OK) {
-            if (TIM_CHANNEL_STATE_GET(&TIM_HANDLE, TIM_CH) == HAL_TIM_CHANNEL_STATE_BUSY) {
-                DMA_Send_Stat = HAL_BUSY;
-                continue;
-            } else if (TIM_CHANNEL_STATE_GET(&TIM_HANDLE, TIM_CH) == HAL_TIM_CHANNEL_STATE_READY) {
-                TIM_CHANNEL_STATE_SET(&TIM_HANDLE, TIM_CH, HAL_TIM_CHANNEL_STATE_BUSY);
-            } else {
-                DMA_Send_Stat = HAL_ERROR;
-                continue;
-            }
+        // HAL_StatusTypeDef DMA_Send_Stat = HAL_ERROR;
+        while (1) {
+            // if (TIM_HANDLE.state != PWM_READY) {
+            //     continue;
+            // } else if (TIM_HANDLE.state == PWM_READY) { //(TIM_CHANNEL_STATE_GET(&TIM_HANDLE, TIM_CH) == HAL_TIM_CHANNEL_STATE_READY) {
+            //     TIM_CHANNEL_STATE_SET(&TIM_HANDLE, TIM_CH, HAL_TIM_CHANNEL_STATE_BUSY);
+            //     break;
+            // } else {
+            //     continue;
+            // }
 #if TIM_CH == TIM_CHANNEL_1
 #define ARGB_TIM_DMA_ID TIM_DMA_ID_CC1
 #define ARGB_TIM_DMA_CC TIM_DMA_CC1
@@ -488,6 +487,7 @@ static void ARGB_TIM_DMADelayPulseCplt(DMA_Stream_TypeDef *hdma) {
     } else { // if END of transfer
         BUF_COUNTER = 0;
         // STOP DMA:
+        // dmaStreamDisable(DMA_HANDLE)
 #if TIM_CH == TIM_CHANNEL_1
         __HAL_TIM_DISABLE_DMA(htim, TIM_DMA_CC1);
         (void) HAL_DMA_Abort_IT(htim->hdma[TIM_DMA_ID_CC1]);
@@ -513,6 +513,7 @@ static void ARGB_TIM_DMADelayPulseCplt(DMA_Stream_TypeDef *hdma) {
         /* Set the TIM channel state */
         TIM_CHANNEL_STATE_SET(htim, TIM_CH, HAL_TIM_CHANNEL_STATE_READY);
         ARGB_LOC_ST = ARGB_READY;
+        // pwmDisableChannel(TIM_HANDLE, 1);
     }
     htim->Channel = HAL_TIM_ACTIVE_CHANNEL_CLEARED;
 }
