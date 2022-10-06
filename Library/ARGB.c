@@ -358,7 +358,8 @@ ARGB_STATE ARGB_Show(void) {
                 continue;
             }
             */
-            dmaStreamEnable(STM32_DMA1_STREAM6);
+            // probably always enabled
+            // dmaStreamEnable(STM32_DMA1_STREAM6); 
             dmaStartMemCopy(DMA_HANDLE, DMA_HANDLE->stream->CR, PWM_BUF, &TIM_HANDLE.tim->CCR, PWM_BUF_LEN);
 
 
@@ -376,7 +377,8 @@ ARGB_STATE ARGB_Show(void) {
                 __HAL_TIM_ENABLE(&TIM_HANDLE);
             DMA_Send_Stat = HAL_OK;
             */
-            pwmStart(&TIM_HANDLE, TIM_HANDLE.config);
+            // enable timer
+            TIM_HANDLE.tim->CR1 |= STM32_TIM_CR1_ARPE | STM32_TIM_CR1_URS | STM32_TIM_CR1_CEN;
         }
         BUF_COUNTER = 2;
         return ARGB_OK;
@@ -460,9 +462,11 @@ void ARGB_TIM_DMADelayPulseCplt(DMA_Stream_TypeDef *hdma, uint32_t flags) {
         
         if (flags & STM32_DMA_ISR_HTIF)
         {
-            if (BUF_COUNTER < NUM_PIXELS) {
-            // fill first part of buffer
-                for (volatile uint8_t i = 0; i < 8; i++) {
+            if (BUF_COUNTER < NUM_PIXELS) 
+            {
+                // fill first part of buffer
+                for (volatile uint8_t i = 0; i < 8; i++) 
+                {
 #ifdef SK6812
                     PWM_BUF[i] = (((RGB_BUF[4 * BUF_COUNTER] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
                     PWM_BUF[i + 8] = (((RGB_BUF[4 * BUF_COUNTER + 1] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
@@ -475,7 +479,9 @@ void ARGB_TIM_DMADelayPulseCplt(DMA_Stream_TypeDef *hdma, uint32_t flags) {
 #endif
                 }
                 BUF_COUNTER++;
-            } else if (BUF_COUNTER < NUM_PIXELS + 2) { // if RET transfer
+            } 
+            else if (BUF_COUNTER < NUM_PIXELS + 2) // if RET transfer
+            {
                 memset((dma_siz *) &PWM_BUF[0], 0, (PWM_BUF_LEN / 2)*sizeof(dma_siz)); // first part
                 BUF_COUNTER++;
             }
@@ -507,10 +513,15 @@ void ARGB_TIM_DMADelayPulseCplt(DMA_Stream_TypeDef *hdma, uint32_t flags) {
                 // nothing to do
             }
             */
+            // pwmDisableChannel(&PWMD2, 1);
+
+            
         // if data transfer
-            if (BUF_COUNTER < NUM_PIXELS) {
+            if (BUF_COUNTER < NUM_PIXELS) 
+            {
                 // fill second part of buffer
-                for (volatile uint8_t i = 0; i < 8; i++) {
+                for (volatile uint8_t i = 0; i < 8; i++) 
+                {
 #ifdef SK6812
                     PWM_BUF[i + 32] = (((RGB_BUF[4 * BUF_COUNTER] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
                     PWM_BUF[i + 40] = (((RGB_BUF[4 * BUF_COUNTER + 1] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
@@ -523,10 +534,14 @@ void ARGB_TIM_DMADelayPulseCplt(DMA_Stream_TypeDef *hdma, uint32_t flags) {
 #endif
                 }
                 BUF_COUNTER++;
-            } else if (BUF_COUNTER < NUM_PIXELS + 2) { // if RET transfer
+            } 
+            else if (BUF_COUNTER < NUM_PIXELS + 2) // if RET transfer
+            {
                 memset((dma_siz *) &PWM_BUF[PWM_BUF_LEN / 2], 0, (PWM_BUF_LEN / 2)*sizeof(dma_siz)); // second part
                 BUF_COUNTER++;
-            } else { // if END of transfer
+            } 
+            else 
+            { // if END of transfer
                 BUF_COUNTER = 0;
                 // STOP DMA:
                 /*
@@ -552,10 +567,11 @@ void ARGB_TIM_DMADelayPulseCplt(DMA_Stream_TypeDef *hdma, uint32_t flags) {
                 }
                 */
                 TIM_HANDLE.tim->DIER &= ~STM32_TIM_DIER_CC2DE;
-                dmaStreamDisable(DMA_HANDLE)
+                // dmaStreamDisable(DMA_HANDLE)
+                
                 /* Disable the Peripheral */
                 //__HAL_TIM_DISABLE(htim);
-                pwmStop(&TIM_HANDLE);
+                TIM_HANDLE.tim->CR1 &= ~STM32_TIM_CR1_CEN;
                 
                 /* Set the TIM channel state */
                 // necessary??
