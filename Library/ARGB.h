@@ -44,7 +44,7 @@
 
 #define TIM_NUM	   2  ///< Timer number
 #define TIM_CH	   TIM_CHANNEL_2  ///< Timer's PWM channel
-#define DMA_HANDLE STM32_DMA1_STREAM6->stream  ///< DMA Channel
+#define DMA_HANDLE STM32_DMA1_STREAM6  ///< DMA Channel
 #define DMA_SIZE_BYTE     ///< DMA Memory Data Width: {.._BYTE, .._HWORD, .._WORD}
 // DMA channel can be found in main.c / tim.c
 
@@ -79,5 +79,7 @@ void ARGB_FillWhite(uint8_t w); // Fill all strip's white component (RGBW)
 
 ARGB_STATE ARGB_Ready(void); // Get DMA Ready state
 ARGB_STATE ARGB_Show(void); // Push data to the strip
+
+void ARGB_TIM_DMADelayPulseCplt(DMA_Stream_TypeDef *hdma, uint32_t flags);
 
 /// @} @}
