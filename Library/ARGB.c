@@ -45,6 +45,7 @@
  */
 
 #include "ARGB.h"  // include header file
+#include "board.h"
 #include "math.h"
 #include <string.h>
 
@@ -81,9 +82,9 @@
 
 /// Timer's RCC Bus
 #if TIM_NUM == 1 || (TIM_NUM >= 8 && TIM_NUM <= 12)
-#define APB1
-#else
 #define APB2
+#else
+#define APB1
 #endif
 
 /// DMA Size
@@ -119,7 +120,15 @@ volatile ARGB_STATE ARGB_LOC_ST; ///< Buffer send status
 
 static inline uint8_t scale8(uint8_t x, uint8_t scale); // Gamma correction
 static void HSV2RGB(uint8_t hue, uint8_t sat, uint8_t val, uint8_t *_r, uint8_t *_g, uint8_t *_b);
+// static void pwm2_toggle_bit_bang_led(PWMDriver *pwmp);
 /// @} //Private
+
+// void pwm2_toggle_bit_bang_led(PWMDriver *pwmp)
+// {
+//     (void) pwmp;
+
+//     palTogglePad(READY_LED_GPIO, READY_LED_PIN);
+// }
 
 /**
  * @brief Init timer & prescalers
@@ -129,7 +138,7 @@ void ARGB_Init(void) {
     /* Auto-calculation! */
     uint32_t APBfq; // Clock freq
 #ifdef APB1
-    APBfq = STM32_PCLK1();
+    APBfq = STM32_PCLK1;
     APBfq *= (RCC->CFGR & RCC_CFGR_PPRE1) == 0 ? 1 : 2;
 #endif
 #ifdef APB2
@@ -141,9 +150,9 @@ void ARGB_Init(void) {
 #else
     APBfq /= (uint32_t) (800 * 1000);  // 800 KHz - 1.25us
 #endif
-    TIM_HANDLE.tim->PSC = 0;                        // dummy hardcode now
-    TIM_HANDLE.tim->ARR = (uint16_t) (APBfq - 1);   // set timer prescaler
-    TIM_HANDLE.tim->EGR = 1;                        // update timer registers
+    // TIM_HANDLE.tim->PSC = 0;
+    // TIM_HANDLE.tim->ARR = (uint16_t) (APBfq - 1);   // set timer prescaler
+    // TIM_HANDLE.tim->EGR = 1;                        // update timer registers
 #if defined(WS2811F) || defined(WS2811S)
     PWM_HI = (uint8_t) (APBfq * 0.48) - 1;     // Log.1 - 48% - 0.60us/1.2us
     PWM_LO = (uint8_t) (APBfq * 0.20) - 1;     // Log.0 - 20% - 0.25us/0.5us
@@ -157,13 +166,39 @@ void ARGB_Init(void) {
     PWM_LO = (uint8_t) (APBfq * 0.24) - 1;     // Log.0 - 24% - 0.30us
 #endif
 
+    const PWMConfig pwm2_conf = {
+        STM32_TIMCLK1,  // TIM_HANDLE.tim->PSC = 0;
+        APBfq - 1,  // TIM_HANDLE.tim->ARR = (uint16_t) (APBfq - 1);   // set timer prescaler
+        NULL,
+        {
+            {PWM_OUTPUT_DISABLED,    NULL},
+            {PWM_OUTPUT_DISABLED, /*ACTIVE_HIGH,*/ NULL},
+            {PWM_OUTPUT_DISABLED,    NULL},
+            {PWM_OUTPUT_ACTIVE_HIGH,    NULL}
+        },
+        0, //STM32_TIM_CR2_MMS(0b101),
+        0  //TIM_DIER_UDE
+    };
+
+    pwmStart(&TIM_HANDLE, &pwm2_conf);
+
+
 //#if INV_SIGNAL
 //    TIM_POINTER->CCER |= TIM_CCER_CC2P; // set inv ch bit
 //#else
 //    TIM_POINTER->CCER &= ~TIM_CCER_CC2P;
 //#endif
     ARGB_LOC_ST = ARGB_READY; // Set Ready Flag
+
+    dmaStreamAllocate(STM32_DMA1_STREAM6, 10, (stm32_dmaisr_t) ARGB_TIM_DMADelayPulseCplt, STM32_DMA1_STREAM6->stream);
+    dmaStreamSetMode(STM32_DMA1_STREAM6, 
+        STM32_DMA_CR_DIR_M2P | STM32_DMA_CR_CIRC | STM32_DMA_CR_HTIE | STM32_DMA_CR_TCIE |
+        STM32_DMA_CR_MINC | STM32_DMA_CR_PSIZE_WORD | STM32_DMA_CR_MSIZE_BYTE | 
+        STM32_DMA_CR_CHSEL(3));
+    dmaStreamEnable(STM32_DMA1_STREAM6);
+    
     // TIM_CCxChannelCmd(TIM_HANDLE.tim, TIM_CH, TIM_CCx_ENABLE); // Enable GPIO output but we want interrupt?
+    pwmEnableChannel(&TIM_HANDLE, 4-1, PWM_PERCENTAGE_TO_WIDTH(&TIM_HANDLE, 0));
 }
 
 /**
@@ -360,11 +395,11 @@ ARGB_STATE ARGB_Show(void) {
             */
             // probably always enabled
             // dmaStreamEnable(STM32_DMA1_STREAM6); 
-            dmaStartMemCopy(DMA_HANDLE, DMA_HANDLE->stream->CR, PWM_BUF, &TIM_HANDLE.tim->CCR, PWM_BUF_LEN);
+            dmaStartMemCopy(DMA_HANDLE, DMA_HANDLE->stream->CR, PWM_BUF, &TIM_HANDLE.tim->CCR[3], PWM_BUF_LEN);
 
 
             // __HAL_TIM_ENABLE_DMA(&TIM_HANDLE, ARGB_TIM_DMA_CC);
-            TIM_HANDLE.tim->DIER |= STM32_TIM_DIER_CC2DE;
+            TIM_HANDLE.tim->DIER |= STM32_TIM_DIER_CC4DE;
 
             /*
             if (IS_TIM_BREAK_INSTANCE(TIM_HANDLE.tim) != RESET)
@@ -378,7 +413,7 @@ ARGB_STATE ARGB_Show(void) {
             DMA_Send_Stat = HAL_OK;
             */
             // enable timer
-            TIM_HANDLE.tim->CR1 |= STM32_TIM_CR1_ARPE | STM32_TIM_CR1_URS | STM32_TIM_CR1_CEN;
+            // TIM_HANDLE.tim->CR1 |= STM32_TIM_CR1_ARPE | STM32_TIM_CR1_URS | STM32_TIM_CR1_CEN;
         }
         BUF_COUNTER = 2;
         return ARGB_OK;
@@ -566,12 +601,12 @@ void ARGB_TIM_DMADelayPulseCplt(DMA_Stream_TypeDef *hdma, uint32_t flags) {
                     __HAL_TIM_MOE_DISABLE(htim);
                 }
                 */
-                TIM_HANDLE.tim->DIER &= ~STM32_TIM_DIER_CC2DE;
+                TIM_HANDLE.tim->DIER &= ~STM32_TIM_DIER_CC4DE;
                 // dmaStreamDisable(DMA_HANDLE)
                 
                 /* Disable the Peripheral */
                 //__HAL_TIM_DISABLE(htim);
-                TIM_HANDLE.tim->CR1 &= ~STM32_TIM_CR1_CEN;
+                // TIM_HANDLE.tim->CR1 &= ~STM32_TIM_CR1_CEN;
                 
                 /* Set the TIM channel state */
                 // necessary??
