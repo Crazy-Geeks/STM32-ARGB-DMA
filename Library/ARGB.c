@@ -502,6 +502,11 @@ void ARGB_TIM_DMADelayPulseCplt(DMA_Stream_TypeDef *hdma, uint32_t flags) {
     
     if (flags & STM32_DMA_ISR_HTIF)
     {
+        if (!(flags & STM32_DMA_ISR_TCIF))
+        {
+            dmaStreamClearInterrupt(DMA_HANDLE);
+        }
+
         if (BUF_COUNTER < NUM_PIXELS) 
         {
             // fill first part of buffer
@@ -524,11 +529,6 @@ void ARGB_TIM_DMADelayPulseCplt(DMA_Stream_TypeDef *hdma, uint32_t flags) {
         {
             memset((dma_siz *) &PWM_BUF[0], 0, (PWM_BUF_LEN / 2)*sizeof(dma_siz)); // first part
             BUF_COUNTER++;
-        }
-
-        if (!(flags & STM32_DMA_ISR_TCIF))
-        {
-            dmaStreamClearInterrupt(DMA_HANDLE);
         }
     }
     if (flags & STM32_DMA_ISR_TCIF)
@@ -610,11 +610,11 @@ void ARGB_TIM_DMADelayPulseCplt(DMA_Stream_TypeDef *hdma, uint32_t flags) {
             }
             */
             TIM_HANDLE.tim->DIER &= ~STM32_TIM_DIER_CC4DE;
-            dmaStreamDisable(DMA_HANDLE)
+            dmaStreamDisable(DMA_HANDLE);
             
             /* Disable the Peripheral */
             //__HAL_TIM_DISABLE(htim);
-            pwmDisableChannel(&PWMD2, TIM_CH-1);
+            pwmDisableChannelI(&PWMD2, TIM_CH-1);
 
             
             /* Set the TIM channel state */
