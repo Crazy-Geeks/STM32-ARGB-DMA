@@ -166,21 +166,23 @@ void ARGB_Init(void) {
     PWM_LO = (uint8_t) (APBfq * 0.24) - 1;     // Log.0 - 24% - 0.30us
 #endif
 
-    const PWMConfig pwm2_conf = {
+    static const PWMConfig pwm2_conf = {
         STM32_TIMCLK1,  // TIM_HANDLE.tim->PSC = 0;
-        APBfq - 1,  // TIM_HANDLE.tim->ARR = (uint16_t) (APBfq - 1);   // set timer prescaler
+        (STM32_TIMCLK1 / (800*1000)) - 1,  // TIM_HANDLE.tim->ARR = (uint16_t) (APBfq - 1);   // set timer prescaler
         NULL,
         {
             {PWM_OUTPUT_DISABLED,    NULL},
             {PWM_OUTPUT_DISABLED, /*ACTIVE_HIGH,*/ NULL},
             {PWM_OUTPUT_DISABLED,    NULL},
-            {PWM_OUTPUT_ACTIVE_HIGH,    NULL}
+            {PWM_OUTPUT_ACTIVE_LOW,    NULL}
         },
         0, //STM32_TIM_CR2_MMS(0b101),
         0  //TIM_DIER_UDE
     };
 
+    // TIM_CCxChannelCmd(TIM_HANDLE.tim, TIM_CH, TIM_CCx_ENABLE); // Enable GPIO output but we want interrupt?
     pwmStart(&TIM_HANDLE, &pwm2_conf);
+    // TIM_HANDLE.tim->CR1 &= ~
 
 
 //#if INV_SIGNAL
@@ -190,15 +192,7 @@ void ARGB_Init(void) {
 //#endif
     ARGB_LOC_ST = ARGB_READY; // Set Ready Flag
 
-    dmaStreamAllocate(STM32_DMA1_STREAM6, 10, (stm32_dmaisr_t) ARGB_TIM_DMADelayPulseCplt, STM32_DMA1_STREAM6->stream);
-    dmaStreamSetMode(STM32_DMA1_STREAM6, 
-        STM32_DMA_CR_DIR_M2P | STM32_DMA_CR_CIRC | STM32_DMA_CR_HTIE | STM32_DMA_CR_TCIE |
-        STM32_DMA_CR_MINC | STM32_DMA_CR_PSIZE_WORD | STM32_DMA_CR_MSIZE_BYTE | 
-        STM32_DMA_CR_CHSEL(3));
-    dmaStreamEnable(STM32_DMA1_STREAM6);
-    
-    // TIM_CCxChannelCmd(TIM_HANDLE.tim, TIM_CH, TIM_CCx_ENABLE); // Enable GPIO output but we want interrupt?
-    pwmEnableChannel(&TIM_HANDLE, 4-1, PWM_PERCENTAGE_TO_WIDTH(&TIM_HANDLE, 0));
+    dmaStreamAllocate(DMA_HANDLE, 10, (stm32_dmaisr_t) ARGB_TIM_DMADelayPulseCplt, DMA_HANDLE->stream);
 }
 
 /**
@@ -356,7 +350,6 @@ ARGB_STATE ARGB_Show(void) {
         }
         // HAL_StatusTypeDef DMA_Send_Stat = HAL_ERROR;
         while (1) {
-            // Is this necessary??
             // if (TIM_HANDLE.state != PWM_READY) {
             //     continue;
             // } else if (TIM_HANDLE.state == PWM_READY) { //(TIM_CHANNEL_STATE_GET(&TIM_HANDLE, TIM_CH) == HAL_TIM_CHANNEL_STATE_READY) {
@@ -365,22 +358,27 @@ ARGB_STATE ARGB_Show(void) {
             // } else {
             //     continue;
             // }
+            if (pwmIsChannelEnabledI(&TIM_HANDLE, (TIM_CH-1)))
+            {
+                continue;
+            }
+
 #if TIM_CH == TIM_CHANNEL_1
 #define ARGB_TIM_DMA_ID TIM_DMA_ID_CC1
 #define ARGB_TIM_DMA_CC TIM_DMA_CC1
-#define ARGB_TIM_CCR CCR1
+#define ARGB_TIM_CCR 0
 #elif TIM_CH == TIM_CHANNEL_2
 #define ARGB_TIM_DMA_ID TIM_DMA_ID_CC2
 #define ARGB_TIM_DMA_CC TIM_DMA_CC2
-#define ARGB_TIM_CCR CCR2
+#define ARGB_TIM_CCR 1
 #elif TIM_CH == TIM_CHANNEL_3
 #define ARGB_TIM_DMA_ID TIM_DMA_ID_CC3
 #define ARGB_TIM_DMA_CC TIM_DMA_CC3
-#define ARGB_TIM_CCR CCR3
+#define ARGB_TIM_CCR 2
 #elif TIM_CH == TIM_CHANNEL_4
 #define ARGB_TIM_DMA_ID TIM_DMA_ID_CC4
 #define ARGB_TIM_DMA_CC TIM_DMA_CC4
-#define ARGB_TIM_CCR CCR4
+#define ARGB_TIM_CCR 3
 #endif      
             /*
             TIM_HANDLE.hdma[ARGB_TIM_DMA_ID]->XferCpltCallback = ARGB_TIM_DMADelayPulseCplt;
@@ -394,8 +392,15 @@ ARGB_STATE ARGB_Show(void) {
             }
             */
             // probably always enabled
-            // dmaStreamEnable(STM32_DMA1_STREAM6); 
-            dmaStartMemCopy(DMA_HANDLE, DMA_HANDLE->stream->CR, PWM_BUF, &TIM_HANDLE.tim->CCR[3], PWM_BUF_LEN);
+            dmaStreamSetMemory0(DMA_HANDLE, &PWM_BUF[0]);
+            dmaStreamSetPeripheral(DMA_HANDLE, &TIM_HANDLE.tim->CCR[3]);
+            dmaStreamSetTransactionSize(DMA_HANDLE, PWM_BUF_LEN);
+            dmaStreamSetMode(DMA_HANDLE, 
+                STM32_DMA_CR_DIR_M2P | STM32_DMA_CR_CIRC | STM32_DMA_CR_HTIE | STM32_DMA_CR_TCIE | STM32_DMA_CR_TEIE |
+                STM32_DMA_CR_MINC | STM32_DMA_CR_PSIZE_WORD | STM32_DMA_CR_MSIZE_WORD | STM32_DMA_CR_CHSEL(3));
+
+            // dmaStartMemCopy(DMA_HANDLE, DMA_HANDLE->stream->CR, PWM_BUF, TIM_HANDLE.tim->CCR[ARGB_TIM_CCR], PWM_BUF_LEN);
+            dmaStreamEnable(DMA_HANDLE);
 
 
             // __HAL_TIM_ENABLE_DMA(&TIM_HANDLE, ARGB_TIM_DMA_CC);
@@ -413,7 +418,9 @@ ARGB_STATE ARGB_Show(void) {
             DMA_Send_Stat = HAL_OK;
             */
             // enable timer
-            // TIM_HANDLE.tim->CR1 |= STM32_TIM_CR1_ARPE | STM32_TIM_CR1_URS | STM32_TIM_CR1_CEN;
+            pwmEnableChannel(&TIM_HANDLE, TIM_CH-1, 0);// PWM_PERCENTAGE_TO_WIDTH(&TIM_HANDLE, 5000));
+            // TIM_HANDLE.tim->CR1 |= STM32_TIM_CR1_CEN;
+            break;
         }
         BUF_COUNTER = 2;
         return ARGB_OK;
@@ -486,136 +493,137 @@ static void HSV2RGB(uint8_t hue, uint8_t sat, uint8_t val, uint8_t *_r, uint8_t 
   */
 void ARGB_TIM_DMADelayPulseCplt(DMA_Stream_TypeDef *hdma, uint32_t flags) {
     (void) hdma;
-    if (flags & (STM32_DMA_ISR_TCIF | STM32_DMA_ISR_HTIF))
+    if (BUF_COUNTER == 0) return; // if no data to transmit - return
+    /*
+    TIM_HandleTypeDef *htim = (TIM_HandleTypeDef *) ((DMA_Stream_TypeDef *) hdma)->Parent;
+    // if wrong handlers
+    if (hdma != &DMA_HANDLE || htim != &TIM_HANDLE) return;
+    */
+    
+    if (flags & STM32_DMA_ISR_HTIF)
+    {
+        if (BUF_COUNTER < NUM_PIXELS) 
+        {
+            // fill first part of buffer
+            for (volatile uint8_t i = 0; i < 8; i++) 
+            {
+#ifdef SK6812
+                PWM_BUF[i] = (((RGB_BUF[4 * BUF_COUNTER] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
+                PWM_BUF[i + 8] = (((RGB_BUF[4 * BUF_COUNTER + 1] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
+                PWM_BUF[i + 16] = (((RGB_BUF[4 * BUF_COUNTER + 2] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
+                PWM_BUF[i + 24] = (((RGB_BUF[4 * BUF_COUNTER + 3] << i) & 0x80) > 0)? PWM_HI : PWM_LO;
+#else
+                PWM_BUF[i] = (((RGB_BUF[3 * BUF_COUNTER] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
+                PWM_BUF[i + 8] = (((RGB_BUF[3 * BUF_COUNTER + 1] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
+                PWM_BUF[i + 16] = (((RGB_BUF[3 * BUF_COUNTER + 2] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
+#endif
+            }
+            BUF_COUNTER++;
+        } 
+        else if (BUF_COUNTER < NUM_PIXELS + 2) // if RET transfer
+        {
+            memset((dma_siz *) &PWM_BUF[0], 0, (PWM_BUF_LEN / 2)*sizeof(dma_siz)); // first part
+            BUF_COUNTER++;
+        }
+
+        if (!(flags & STM32_DMA_ISR_TCIF))
+        {
+            dmaStreamClearInterrupt(DMA_HANDLE);
+        }
+    }
+    if (flags & STM32_DMA_ISR_TCIF)
     {
         /*
-        TIM_HandleTypeDef *htim = (TIM_HandleTypeDef *) ((DMA_Stream_TypeDef *) hdma)->Parent;
-        // if wrong handlers
-        if (hdma != &DMA_HANDLE || htim != &TIM_HANDLE) return;
-        */
-        if (BUF_COUNTER == 0) return; // if no data to transmit - return
-        
-        if (flags & STM32_DMA_ISR_HTIF)
-        {
-            if (BUF_COUNTER < NUM_PIXELS) 
-            {
-                // fill first part of buffer
-                for (volatile uint8_t i = 0; i < 8; i++) 
-                {
-#ifdef SK6812
-                    PWM_BUF[i] = (((RGB_BUF[4 * BUF_COUNTER] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
-                    PWM_BUF[i + 8] = (((RGB_BUF[4 * BUF_COUNTER + 1] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
-                    PWM_BUF[i + 16] = (((RGB_BUF[4 * BUF_COUNTER + 2] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
-                    PWM_BUF[i + 24] = (((RGB_BUF[4 * BUF_COUNTER + 3] << i) & 0x80) > 0)? PWM_HI : PWM_LO;
-#else
-                    PWM_BUF[i] = (((RGB_BUF[3 * BUF_COUNTER] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
-                    PWM_BUF[i + 8] = (((RGB_BUF[3 * BUF_COUNTER + 1] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
-                    PWM_BUF[i + 16] = (((RGB_BUF[3 * BUF_COUNTER + 2] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
-#endif
-                }
-                BUF_COUNTER++;
-            } 
-            else if (BUF_COUNTER < NUM_PIXELS + 2) // if RET transfer
-            {
-                memset((dma_siz *) &PWM_BUF[0], 0, (PWM_BUF_LEN / 2)*sizeof(dma_siz)); // first part
-                BUF_COUNTER++;
+        if (hdma == htim->hdma[TIM_DMA_ID_CC1]) {
+            htim->Channel = HAL_TIM_ACTIVE_CHANNEL_1;
+            if (hdma->Init.Mode == DMA_NORMAL) {
+                TIM_CHANNEL_STATE_SET(htim, TIM_CHANNEL_1, HAL_TIM_CHANNEL_STATE_READY);
             }
+        } else if (hdma == htim->hdma[TIM_DMA_ID_CC2]) {
+            htim->Channel = HAL_TIM_ACTIVE_CHANNEL_2;
+            if (hdma->Init.Mode == DMA_NORMAL) {
+                TIM_CHANNEL_STATE_SET(htim, TIM_CHANNEL_2, HAL_TIM_CHANNEL_STATE_READY);
+            }
+        } else if (hdma == htim->hdma[TIM_DMA_ID_CC3]) {
+            htim->Channel = HAL_TIM_ACTIVE_CHANNEL_3;
+            if (hdma->Init.Mode == DMA_NORMAL) {
+                TIM_CHANNEL_STATE_SET(htim, TIM_CHANNEL_3, HAL_TIM_CHANNEL_STATE_READY);
+            }
+        } else if (hdma == htim->hdma[TIM_DMA_ID_CC4]) {
+            htim->Channel = HAL_TIM_ACTIVE_CHANNEL_4;
+            if (hdma->Init.Mode == DMA_NORMAL) {
+                TIM_CHANNEL_STATE_SET(htim, TIM_CHANNEL_4, HAL_TIM_CHANNEL_STATE_READY);
+            }
+        } else {
+            // nothing to do
         }
-        else if (flags & STM32_DMA_ISR_TCIF)
+        */
+        
+    // if data transfer
+        if (BUF_COUNTER < NUM_PIXELS) 
         {
+            // fill second part of buffer
+            for (volatile uint8_t i = 0; i < 8; i++) 
+            {
+#ifdef SK6812
+                PWM_BUF[i + 32] = (((RGB_BUF[4 * BUF_COUNTER] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
+                PWM_BUF[i + 40] = (((RGB_BUF[4 * BUF_COUNTER + 1] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
+                PWM_BUF[i + 48] = (((RGB_BUF[4 * BUF_COUNTER + 2] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
+                PWM_BUF[i + 56] = (((RGB_BUF[4 * BUF_COUNTER + 3] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
+#else
+                PWM_BUF[i + 24] = (((RGB_BUF[3 * BUF_COUNTER] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
+                PWM_BUF[i + 32] = (((RGB_BUF[3 * BUF_COUNTER + 1] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
+                PWM_BUF[i + 40] = (((RGB_BUF[3 * BUF_COUNTER + 2] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
+#endif
+            }
+            BUF_COUNTER++;
+        } 
+        else if (BUF_COUNTER < NUM_PIXELS + 2) // if RET transfer
+        {
+            memset((dma_siz *) &PWM_BUF[PWM_BUF_LEN / 2], 0, (PWM_BUF_LEN / 2)*sizeof(dma_siz)); // second part
+            BUF_COUNTER++;
+        } 
+        else 
+        { // if END of transfer
+            BUF_COUNTER = 0;
+            // STOP DMA:
             /*
-            if (hdma == htim->hdma[TIM_DMA_ID_CC1]) {
-                htim->Channel = HAL_TIM_ACTIVE_CHANNEL_1;
-                if (hdma->Init.Mode == DMA_NORMAL) {
-                    TIM_CHANNEL_STATE_SET(htim, TIM_CHANNEL_1, HAL_TIM_CHANNEL_STATE_READY);
-                }
-            } else if (hdma == htim->hdma[TIM_DMA_ID_CC2]) {
-                htim->Channel = HAL_TIM_ACTIVE_CHANNEL_2;
-                if (hdma->Init.Mode == DMA_NORMAL) {
-                    TIM_CHANNEL_STATE_SET(htim, TIM_CHANNEL_2, HAL_TIM_CHANNEL_STATE_READY);
-                }
-            } else if (hdma == htim->hdma[TIM_DMA_ID_CC3]) {
-                htim->Channel = HAL_TIM_ACTIVE_CHANNEL_3;
-                if (hdma->Init.Mode == DMA_NORMAL) {
-                    TIM_CHANNEL_STATE_SET(htim, TIM_CHANNEL_3, HAL_TIM_CHANNEL_STATE_READY);
-                }
-            } else if (hdma == htim->hdma[TIM_DMA_ID_CC4]) {
-                htim->Channel = HAL_TIM_ACTIVE_CHANNEL_4;
-                if (hdma->Init.Mode == DMA_NORMAL) {
-                    TIM_CHANNEL_STATE_SET(htim, TIM_CHANNEL_4, HAL_TIM_CHANNEL_STATE_READY);
-                }
-            } else {
-                // nothing to do
+    #if TIM_CH == TIM_CHANNEL_1
+            __HAL_TIM_DISABLE_DMA(htim, TIM_DMA_CC1);
+            (void) HAL_DMA_Abort_IT(htim->hdma[TIM_DMA_ID_CC1]);
+    #endif
+    #if TIM_CH == TIM_CHANNEL_2
+            __HAL_TIM_DISABLE_DMA(htim, TIM_DMA_CC2);
+            (void) HAL_DMA_Abort_IT(htim->hdma[TIM_DMA_ID_CC2]);
+    #endif
+    #if TIM_CH == TIM_CHANNEL_3
+            __HAL_TIM_DISABLE_DMA(htim, TIM_DMA_CC3);
+            (void) HAL_DMA_Abort_IT(htim->hdma[TIM_DMA_ID_CC3]);
+    #endif
+    #if TIM_CH == TIM_CHANNEL_4
+            __HAL_TIM_DISABLE_DMA(htim, TIM_DMA_CC4);
+            (void) HAL_DMA_Abort_IT(htim->hdma[TIM_DMA_ID_CC4]);
+    #endif
+            if (IS_TIM_BREAK_INSTANCE(htim->Instance) != RESET) {
+                // Disable the Main Output
+                __HAL_TIM_MOE_DISABLE(htim);
             }
             */
-            // pwmDisableChannel(&PWMD2, 1);
+            TIM_HANDLE.tim->DIER &= ~STM32_TIM_DIER_CC4DE;
+            dmaStreamDisable(DMA_HANDLE)
+            
+            /* Disable the Peripheral */
+            //__HAL_TIM_DISABLE(htim);
+            pwmDisableChannel(&PWMD2, TIM_CH-1);
 
             
-        // if data transfer
-            if (BUF_COUNTER < NUM_PIXELS) 
-            {
-                // fill second part of buffer
-                for (volatile uint8_t i = 0; i < 8; i++) 
-                {
-#ifdef SK6812
-                    PWM_BUF[i + 32] = (((RGB_BUF[4 * BUF_COUNTER] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
-                    PWM_BUF[i + 40] = (((RGB_BUF[4 * BUF_COUNTER + 1] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
-                    PWM_BUF[i + 48] = (((RGB_BUF[4 * BUF_COUNTER + 2] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
-                    PWM_BUF[i + 56] = (((RGB_BUF[4 * BUF_COUNTER + 3] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
-#else
-                    PWM_BUF[i + 24] = (((RGB_BUF[3 * BUF_COUNTER] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
-                    PWM_BUF[i + 32] = (((RGB_BUF[3 * BUF_COUNTER + 1] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
-                    PWM_BUF[i + 40] = (((RGB_BUF[3 * BUF_COUNTER + 2] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
-#endif
-                }
-                BUF_COUNTER++;
-            } 
-            else if (BUF_COUNTER < NUM_PIXELS + 2) // if RET transfer
-            {
-                memset((dma_siz *) &PWM_BUF[PWM_BUF_LEN / 2], 0, (PWM_BUF_LEN / 2)*sizeof(dma_siz)); // second part
-                BUF_COUNTER++;
-            } 
-            else 
-            { // if END of transfer
-                BUF_COUNTER = 0;
-                // STOP DMA:
-                /*
-        #if TIM_CH == TIM_CHANNEL_1
-                __HAL_TIM_DISABLE_DMA(htim, TIM_DMA_CC1);
-                (void) HAL_DMA_Abort_IT(htim->hdma[TIM_DMA_ID_CC1]);
-        #endif
-        #if TIM_CH == TIM_CHANNEL_2
-                __HAL_TIM_DISABLE_DMA(htim, TIM_DMA_CC2);
-                (void) HAL_DMA_Abort_IT(htim->hdma[TIM_DMA_ID_CC2]);
-        #endif
-        #if TIM_CH == TIM_CHANNEL_3
-                __HAL_TIM_DISABLE_DMA(htim, TIM_DMA_CC3);
-                (void) HAL_DMA_Abort_IT(htim->hdma[TIM_DMA_ID_CC3]);
-        #endif
-        #if TIM_CH == TIM_CHANNEL_4
-                __HAL_TIM_DISABLE_DMA(htim, TIM_DMA_CC4);
-                (void) HAL_DMA_Abort_IT(htim->hdma[TIM_DMA_ID_CC4]);
-        #endif
-                if (IS_TIM_BREAK_INSTANCE(htim->Instance) != RESET) {
-                    // Disable the Main Output
-                    __HAL_TIM_MOE_DISABLE(htim);
-                }
-                */
-                TIM_HANDLE.tim->DIER &= ~STM32_TIM_DIER_CC4DE;
-                // dmaStreamDisable(DMA_HANDLE)
-                
-                /* Disable the Peripheral */
-                //__HAL_TIM_DISABLE(htim);
-                // TIM_HANDLE.tim->CR1 &= ~STM32_TIM_CR1_CEN;
-                
-                /* Set the TIM channel state */
-                // necessary??
-                // TIM_CHANNEL_STATE_SET(htim, TIM_CH, HAL_TIM_CHANNEL_STATE_READY);
-                ARGB_LOC_ST = ARGB_READY;
-            }
-            // ???
-            // htim->Channel = HAL_TIM_ACTIVE_CHANNEL_CLEARED;
+            /* Set the TIM channel state */
+            // necessary??
+            // TIM_CHANNEL_STATE_SET(htim, TIM_CH, HAL_TIM_CHANNEL_STATE_READY);
+            ARGB_LOC_ST = ARGB_READY;
         }
+        // ???
+        // htim->Channel = HAL_TIM_ACTIVE_CHANNEL_CLEARED;
     }
 }
 
