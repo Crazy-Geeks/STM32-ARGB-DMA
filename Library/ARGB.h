@@ -33,7 +33,7 @@
 // WS2812  — GRB, 800kHz;
 // SK6812  — RGBW, 800kHz
 
-#define NUM_PIXELS 10 ///< Pixel quantity
+#define NUM_PIXELS 6 ///< Pixel quantity
 
 #define USE_GAMMA_CORRECTION 1 ///< Gamma-correction should fix red&green, try for yourself
 
@@ -46,7 +46,16 @@
 #define TIM_CH	   TIM_CHANNEL_4  ///< Timer's PWM channel
 #define DMA_HANDLE STM32_DMA1_STREAM6  ///< DMA Channel
 #define DMA_SIZE_WORD     ///< DMA Memory Data Width: {.._BYTE, .._HWORD, .._WORD}
-// DMA channel can be found in main.c / tim.c
+
+#if TIM_CH == TIM_CHANNEL_1
+#define ARGB_TIM_CCR 0
+#elif TIM_CH == TIM_CHANNEL_2
+#define ARGB_TIM_CCR 1
+#elif TIM_CH == TIM_CHANNEL_3
+#define ARGB_TIM_CCR 2
+#elif TIM_CH == TIM_CHANNEL_4
+#define ARGB_TIM_CCR 3
+#endif    
 
 /// @}
 
