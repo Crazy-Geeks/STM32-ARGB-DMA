@@ -12,6 +12,11 @@
  * @note RU article: https://crazygeeks.ru/stm32-argb-lib
  */
 
+/**
+ * Significant history (date, user, job code, action):
+ * - 2022-10-18, Dylan Arrabito  <darrabito@carngeigerobotics.com>, IRAD.8015.1, Greatly modified to support ChibiOS.
+ */
+
 /* WS2811 Timings
  * Tolerance: +/- 150ns <-> +/- 0.15us
  * RES: >50us
@@ -124,13 +129,13 @@ static const PWMConfig pwm2_conf =
     ARR_VAL - 1,
     NULL,
     {
-        {PWM_OUTPUT_DISABLED,    NULL},
-        {PWM_OUTPUT_DISABLED, /*ACTIVE_HIGH,*/ NULL},
-        {PWM_OUTPUT_DISABLED,    NULL},
-        {PWM_OUTPUT_ACTIVE_LOW,    NULL}
+        {PWM_OUTPUT_DISABLED,   NULL},
+        {PWM_OUTPUT_DISABLED,   NULL},
+        {PWM_OUTPUT_DISABLED,   NULL},
+        {PWM_OUTPUT_ACTIVE_LOW, NULL}
     },
-    0, //STM32_TIM_CR2_MMS(0b101),
-    0  //TIM_DIER_UDE
+    0,
+    0  
 };
 
 /// Static LED buffer

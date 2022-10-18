@@ -12,6 +12,11 @@
  * @note RU article: https://crazygeeks.ru/stm32-argb-lib
  */
 
+/**
+ * Significant history (date, user, job code, action):
+ * - 2022-10-18, Dylan Arrabito  <darrabito@carngeigerobotics.com>, IRAD.8015.1, Greatly modified to support ChibiOS.
+ */
+
 #pragma once
 
 #include "hal.h"
