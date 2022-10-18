@@ -27,35 +27,29 @@
  * @{
  */
 
+// define this to get white channel support even though we have two different strips
 #define SK6812       ///< Family: {WS2811S, WS2811F, WS2812, SK6812}
+
 // WS2811S — RGB, 400kHz;
 // WS2811F — RGB, 800kHz;
 // WS2812  — GRB, 800kHz;
 // SK6812  — RGBW, 800kHz
 
-#define NUM_PIXELS 6 ///< Pixel quantity
+#define NUM_PIXELS NUM_LEDS ///< Pixel quantity
 
 #define USE_GAMMA_CORRECTION 1 ///< Gamma-correction should fix red&green, try for yourself
 
-#define TIM_CHANNEL_1 1
-#define TIM_CHANNEL_2 2
-#define TIM_CHANNEL_3 3
-#define TIM_CHANNEL_4 4
+#define TIM_CHANNEL_1 0
+#define TIM_CHANNEL_2 1
+#define TIM_CHANNEL_3 2
+#define TIM_CHANNEL_4 3
 
-#define TIM_NUM	   2  ///< Timer number
 #define TIM_CH	   TIM_CHANNEL_4  ///< Timer's PWM channel
+#define TIM_HANDLE LED_TIMER
+
 #define DMA_HANDLE STM32_DMA1_STREAM6  ///< DMA Channel
 #define DMA_SIZE_WORD     ///< DMA Memory Data Width: {.._BYTE, .._HWORD, .._WORD}
 
-#if TIM_CH == TIM_CHANNEL_1
-#define ARGB_TIM_CCR 0
-#elif TIM_CH == TIM_CHANNEL_2
-#define ARGB_TIM_CCR 1
-#elif TIM_CH == TIM_CHANNEL_3
-#define ARGB_TIM_CCR 2
-#elif TIM_CH == TIM_CHANNEL_4
-#define ARGB_TIM_CCR 3
-#endif    
 
 /// @}
 
@@ -88,7 +82,5 @@ void ARGB_FillWhite(uint8_t w); // Fill all strip's white component (RGBW)
 
 ARGB_STATE ARGB_Ready(void); // Get DMA Ready state
 ARGB_STATE ARGB_Show(void); // Push data to the strip
-
-void ARGB_TIM_DMADelayPulseCplt(DMA_Stream_TypeDef *hdma, uint32_t flags);
 
 /// @} @}
