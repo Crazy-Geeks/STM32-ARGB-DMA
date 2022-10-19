@@ -72,17 +72,29 @@ typedef enum argb_state {
     ARGB_PARAM_ERR = 3, ///< Error in input parameters
 } argb_state;
 
+typedef enum 
+{
+    HUE_RED    = 0,
+    HUE_ORANGE = 32,
+    HUE_YELLOW = 64,
+    HUE_GREEN  = 96,
+    HUE_AQUA   = 128,
+    HUE_BLUE   = 160,
+    HUE_PURPLE = 192,
+    HUE_PINK   = 224
+} hsv_hue;
+
 void argb_init(void);   // Initialization
 void argb_clear(void);  // Clear strip
 
 void argb_set_brightness(uint8_t br); // Set global brightness
 
 void argb_set_rgb(uint16_t i, uint8_t r, uint8_t g, uint8_t b);  // Set single LED by RGB
-void argb_set_hsv(uint16_t i, uint8_t hue, uint8_t sat, uint8_t val); // Set single LED by HSV
+void argb_set_hsv(uint16_t i, hsv_hue hue, uint8_t sat, uint8_t val); // Set single LED by HSV
 void argb_SetWhite(uint16_t i, uint8_t w); // Set white component in LED (RGBW)
 
 void argb_fill_rgb(uint8_t r, uint8_t g, uint8_t b); // Fill all strip with RGB color
-void argb_fill_hsv(uint8_t hue, uint8_t sat, uint8_t val); // Fill all strip with HSV color
+void argb_fill_hsv(hsv_hue hue, uint8_t sat, uint8_t val); // Fill all strip with HSV color
 void argb_fill_white(uint8_t w); // Fill all strip's white component (RGBW)
 
 argb_state argb_ready(void); // Get DMA Ready state
