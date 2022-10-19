@@ -73,7 +73,6 @@
 #define APB_FREQ  STM32_TIMCLK2
 #endif
 
-
 /// DMA Size
 #if defined(DMA_SIZE_BYTE)
 typedef uint8_t dma_siz;
@@ -88,7 +87,6 @@ typedef uint32_t dma_siz;
 #elif defined(APB2)
 #define APB_FREQ STM32_TIMCLK2
 #endif
-
 
 #ifdef WS2811S
 #define ARR_VAL (APB_FREQ / (400*1000)) // 400 KHz - 2.5us
@@ -139,39 +137,39 @@ static const PWMConfig pwm2_conf =
 };
 
 /// Static LED buffer
-volatile uint8_t RGB_BUF[NUM_BYTES] = {0,};
+volatile uint8_t rgb_buf[NUM_BYTES] = {0,};
 
 /// Timer PWM value buffer
-volatile dma_siz PWM_BUF[PWM_BUF_LEN] = {0,};
+volatile dma_siz pwm_buf[PWM_BUF_LEN] = {0,};
 /// PWM buffer iterator
-volatile uint16_t BUF_COUNTER = 0;
+volatile uint16_t buf_counter = 0;
 
-volatile uint8_t ARGB_BR = 255;     ///< LED Global brightness
-volatile ARGB_STATE ARGB_LOC_ST; ///< Buffer send status
+volatile uint8_t argb_brightness = 255;     ///< LED Global brightness
+volatile argb_state argb_lock_state; ///< Buffer send status
 
 static inline uint8_t scale8(uint8_t x, uint8_t scale); // Gamma correction
-static void HSV2RGB(uint8_t hue, uint8_t sat, uint8_t val, uint8_t *_r, uint8_t *_g, uint8_t *_b);
+static void hsv_to_rgb(uint8_t hue, uint8_t sat, uint8_t val, uint8_t *_r, uint8_t *_g, uint8_t *_b);
 
-static void ARGB_TIM_DMADelayPulseCplt(void *param, uint32_t flags);
+static void argb_tim_dma_delay_pulse(void *param, uint32_t flags);
 /// @} //Private
 
 /**
  * @brief Init timer & prescalers
  * @param none
  */
-void ARGB_Init(void) 
+void argb_init(void) 
 {
     // initialize PWM with config
     pwmStart(&TIM_HANDLE, &pwm2_conf);
 
-    ARGB_LOC_ST = ARGB_READY; // Set Ready Flag
+    argb_lock_state = ARGB_READY; // Set Ready Flag
 
     // initialize DMA stream with callback
-    dmaStreamAllocate(DMA_HANDLE, 10, (stm32_dmaisr_t) ARGB_TIM_DMADelayPulseCplt, NULL);
+    dmaStreamAllocate(DMA_HANDLE, 10, (stm32_dmaisr_t) argb_tim_dma_delay_pulse, NULL);
 
     // set up DMA properties
     dmaStreamSetPeripheral(DMA_HANDLE, &TIM_HANDLE.tim->CCR[TIM_CH]);
-    dmaStreamSetMemory0(DMA_HANDLE, &PWM_BUF[0]);
+    dmaStreamSetMemory0(DMA_HANDLE, &pwm_buf[0]);
     dmaStreamSetTransactionSize(DMA_HANDLE, PWM_BUF_LEN);
     dmaStreamSetMode(DMA_HANDLE, DMA_MODE);
 }
@@ -181,11 +179,11 @@ void ARGB_Init(void)
  * @param none
  * @note Update strip after that
  */
-void ARGB_Clear(void) 
+void argb_clear(void) 
 {
-    ARGB_FillRGB(0, 0, 0);
+    argb_fill_rgb(0, 0, 0);
 #ifdef SK6812
-    ARGB_FillWhite(0);
+    argb_fill_white(0);
 #endif
 }
 
@@ -193,9 +191,9 @@ void ARGB_Clear(void)
  * @brief Set GLOBAL LED brightness
  * @param[in] br Brightness [0..255]
  */
-void ARGB_SetBrightness(uint8_t br) 
+void argb_set_brightness(uint8_t br) 
 {
-    ARGB_BR = br;
+    argb_brightness = br;
 }
 
 /**
@@ -205,7 +203,7 @@ void ARGB_SetBrightness(uint8_t br)
  * @param[in] g Green component [0..255]
  * @param[in] b Blue component  [0..255]
  */
-void ARGB_SetRGB(uint16_t i, uint8_t r, uint8_t g, uint8_t b) 
+void argb_set_rgb(uint16_t i, uint8_t r, uint8_t g, uint8_t b) 
 {
     // overflow protection
     if (i >= NUM_PIXELS) {
@@ -213,9 +211,9 @@ void ARGB_SetRGB(uint16_t i, uint8_t r, uint8_t g, uint8_t b)
         i -= _i * NUM_PIXELS;
     }
     // set brightness
-    r /= 256 / ((uint16_t) ARGB_BR + 1);
-    g /= 256 / ((uint16_t) ARGB_BR + 1);
-    b /= 256 / ((uint16_t) ARGB_BR + 1);
+    r /= 256 / ((uint16_t) argb_brightness + 1);
+    g /= 256 / ((uint16_t) argb_brightness + 1);
+    b /= 256 / ((uint16_t) argb_brightness + 1);
 #if USE_GAMMA_CORRECTION
     g = scale8(g, 0xB0);
     b = scale8(b, 0xF0);
@@ -228,41 +226,41 @@ void ARGB_SetRGB(uint16_t i, uint8_t r, uint8_t g, uint8_t b)
     if (i >= NEXT_LED_STRIP_START)
     {
 #if NEXT_LED_STRIP == SK6812_LEDS
-        RGB_BUF[4 * i] = r;
-        RGB_BUF[4 * i + 1] = g;
-        RGB_BUF[4 * i + 2] = b;
+        rgb_buf[4 * i] = r;
+        rgb_buf[4 * i + 1] = g;
+        rgb_buf[4 * i + 2] = b;
 #elif NEXT_LED_STRIP == WS2812_LEDS
-        RGB_BUF[4 * i] = g;
-        RGB_BUF[4 * i + 1] = r;
-        RGB_BUF[4 * i + 2] = b;
+        rgb_buf[4 * i] = g;
+        rgb_buf[4 * i + 1] = r;
+        rgb_buf[4 * i + 2] = b;
 #endif
     }
     else    // not next strip
     {
 #if NEXT_LED_STRIP == SK6812_LEDS
-        RGB_BUF[4 * i] = g;
-        RGB_BUF[4 * i + 1] = r;
-        RGB_BUF[4 * i + 2] = b;
+        rgb_buf[4 * i] = g;
+        rgb_buf[4 * i + 1] = r;
+        rgb_buf[4 * i + 2] = b;
 #elif NEXT_LED_STRIP == WS2812_LEDS
-        RGB_BUF[4 * i] = r;
-        RGB_BUF[4 * i + 1] = g;
-        RGB_BUF[4 * i + 2] = b;
+        rgb_buf[4 * i] = r;
+        rgb_buf[4 * i + 1] = g;
+        rgb_buf[4 * i + 2] = b;
 #endif
     }
 // one type of strip
 // RGBW, GRB, or RGB
 #elif defined(SK6812)
-    RGB_BUF[4 * i] = r;
-    RGB_BUF[4 * i + 1] = g;
-    RGB_BUF[4 * i + 2] = b;
+    rgb_buf[4 * i] = r;
+    rgb_buf[4 * i + 1] = g;
+    rgb_buf[4 * i + 2] = b;
 #elif defined(WS2812)
-    RGB_BUF[3 * i] = g;
-    RGB_BUF[3 * i + 1] = r;
-    RGB_BUF[3 * i + 2] = b;
+    rgb_buf[3 * i] = g;
+    rgb_buf[3 * i + 1] = r;
+    rgb_buf[3 * i + 2] = b;
 #else
-    RGB_BUF[3 * i] = r;
-    RGB_BUF[3 * i + 1] = g;
-    RGB_BUF[3 * i + 2] = b;
+    rgb_buf[3 * i] = r;
+    rgb_buf[3 * i + 1] = g;
+    rgb_buf[3 * i + 2] = b;
 #endif
 }
 
@@ -273,11 +271,11 @@ void ARGB_SetRGB(uint16_t i, uint8_t r, uint8_t g, uint8_t b)
  * @param[in] sat Saturation  [0..255]
  * @param[in] val Value (brightness) [0..255]
  */
-void ARGB_SetHSV(uint16_t i, uint8_t hue, uint8_t sat, uint8_t val) 
+void argb_set_hsv(uint16_t i, uint8_t hue, uint8_t sat, uint8_t val) 
 {
     uint8_t _r, _g, _b;                    // init buffer color
-    HSV2RGB(hue, sat, val, &_r, &_g, &_b); // get RGB color
-    ARGB_SetRGB(i, _r, _g, _b);     // set color
+    hsv_to_rgb(hue, sat, val, &_r, &_g, &_b); // get RGB color
+    argb_set_rgb(i, _r, _g, _b);     // set color
 }
 
 /**
@@ -285,13 +283,13 @@ void ARGB_SetHSV(uint16_t i, uint8_t hue, uint8_t sat, uint8_t val)
  * @param[in] i LED position
  * @param[in] w White component [0..255]
  */
-void ARGB_SetWhite(uint16_t i, uint8_t w) 
+void argb_set_white(uint16_t i, uint8_t w) 
 {
 #ifdef RGB
     return;
 #endif
-    w /= 256 / ((uint16_t) ARGB_BR + 1); // set brightness
-    RGB_BUF[4 * i + 3] = w;                // set white part
+    w /= 256 / ((uint16_t) argb_brightness + 1); // set brightness
+    rgb_buf[4 * i + 3] = w;                // set white part
 }
 
 /**
@@ -300,10 +298,10 @@ void ARGB_SetWhite(uint16_t i, uint8_t w)
  * @param[in] g Green component [0..255]
  * @param[in] b Blue component  [0..255]
  */
-void ARGB_FillRGB(uint8_t r, uint8_t g, uint8_t b) 
+void argb_fill_rgb(uint8_t r, uint8_t g, uint8_t b) 
 {
     for (volatile uint16_t i = 0; i < NUM_PIXELS; i++)
-        ARGB_SetRGB(i, r, g, b);
+        argb_set_rgb(i, r, g, b);
 }
 
 /**
@@ -312,44 +310,44 @@ void ARGB_FillRGB(uint8_t r, uint8_t g, uint8_t b)
  * @param[in] sat Saturation  [0..255]
  * @param[in] val Value (brightness) [0..255]
  */
-void ARGB_FillHSV(uint8_t hue, uint8_t sat, uint8_t val) 
+void argb_fill_hsv(uint8_t hue, uint8_t sat, uint8_t val) 
 {
     uint8_t _r, _g, _b;                    // init buffer color
-    HSV2RGB(hue, sat, val, &_r, &_g, &_b); // get color once (!)
-    ARGB_FillRGB(_r, _g, _b);       // set color
+    hsv_to_rgb(hue, sat, val, &_r, &_g, &_b); // get color once (!)
+    argb_fill_rgb(_r, _g, _b);       // set color
 }
 
 /**
  * @brief Set ALL White components in strip
  * @param[in] w White component [0..255]
  */
-void ARGB_FillWhite(uint8_t w) 
+void argb_fill_white(uint8_t w) 
 {
     for (volatile uint16_t i = 0; i < NUM_PIXELS; i++)
-        ARGB_SetWhite(i, w);
+        argb_set_white(i, w);
 }
 
 /**
  * @brief Get current DMA status
  * @param none
- * @return #ARGB_STATE enum
+ * @return #argb_state enum
  */
-ARGB_STATE ARGB_Ready(void) 
+argb_state argb_ready(void) 
 {
-    return ARGB_LOC_ST;
+    return argb_lock_state;
 }
 
 /**
  * @brief Update strip
  * @param none
- * @return #ARGB_STATE enum
+ * @return #argb_state enum
  */
-ARGB_STATE ARGB_Show(void) 
+argb_state argb_show(void) 
 {
-    ARGB_LOC_ST = ARGB_BUSY;
+    argb_lock_state = ARGB_BUSY;
 
     // if nothing to do or DMA busy
-    if ((BUF_COUNTER != 0) || (DMA_HANDLE->stream->CR & STM32_DMA_CR_EN))
+    if ((buf_counter != 0) || (DMA_HANDLE->stream->CR & STM32_DMA_CR_EN))
     {
         return ARGB_BUSY;
     } 
@@ -358,15 +356,15 @@ ARGB_STATE ARGB_Show(void)
         for (volatile uint8_t i = 0; i < 8; i++) 
         {
             // set first transfer from first values
-            PWM_BUF[i] = (((RGB_BUF[0] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
-            PWM_BUF[i + 8] = (((RGB_BUF[1] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
-            PWM_BUF[i + 16] = (((RGB_BUF[2] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
-            PWM_BUF[i + 24] = (((RGB_BUF[3] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
-            PWM_BUF[i + 32] = (((RGB_BUF[4] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
-            PWM_BUF[i + 40] = (((RGB_BUF[5] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
+            pwm_buf[i] = (((rgb_buf[0] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
+            pwm_buf[i + 8] = (((rgb_buf[1] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
+            pwm_buf[i + 16] = (((rgb_buf[2] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
+            pwm_buf[i + 24] = (((rgb_buf[3] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
+            pwm_buf[i + 32] = (((rgb_buf[4] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
+            pwm_buf[i + 40] = (((rgb_buf[5] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
 #ifdef SK6812
-            PWM_BUF[i + 48] = (((RGB_BUF[6] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
-            PWM_BUF[i + 56] = (((RGB_BUF[7] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
+            pwm_buf[i + 48] = (((rgb_buf[6] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
+            pwm_buf[i + 56] = (((rgb_buf[7] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
 #endif
         }
 
@@ -381,7 +379,7 @@ ARGB_STATE ARGB_Show(void)
         TIM_HANDLE.tim->DIER |= STM32_TIM_DIER_CC4DE;
         pwmEnableChannel(&TIM_HANDLE, TIM_CH, 0);
 
-        BUF_COUNTER = 2;
+        buf_counter = 2;
         return ARGB_OK;
     }
 }
@@ -410,7 +408,7 @@ static inline uint8_t scale8(uint8_t x, uint8_t scale)
  * @param[out] _g Pointer to GREEN component value
  * @param[out] _b Pointer to BLUE component value
  */
-static void HSV2RGB(uint8_t hue, uint8_t sat, uint8_t val, uint8_t *_r, uint8_t *_g, uint8_t *_b) 
+static void hsv_to_rgb(uint8_t hue, uint8_t sat, uint8_t val, uint8_t *_r, uint8_t *_g, uint8_t *_b) 
 {
     if (sat == 0) 
     { // if white color
@@ -454,11 +452,11 @@ static void HSV2RGB(uint8_t hue, uint8_t sat, uint8_t val, uint8_t *_r, uint8_t 
   * @param  dummy param, null ptr
   * @retval None
   */
-void ARGB_TIM_DMADelayPulseCplt(void *param, uint32_t flags) 
+void argb_tim_dma_delay_pulse(void *param, uint32_t flags) 
 {
     (void) param;
 
-    if (BUF_COUNTER == 0) return; // if no data to transmit - return
+    if (buf_counter == 0) return; // if no data to transmit - return
     
     if (flags & STM32_DMA_ISR_HTIF)
     {
@@ -467,59 +465,59 @@ void ARGB_TIM_DMADelayPulseCplt(void *param, uint32_t flags)
             dmaStreamClearInterrupt(DMA_HANDLE);
         }
 
-        if (BUF_COUNTER < NUM_PIXELS) 
+        if (buf_counter < NUM_PIXELS) 
         {
             // fill first part of buffer
             for (volatile uint8_t i = 0; i < 8; i++) 
             {
 #ifdef SK6812
-                PWM_BUF[i] = (((RGB_BUF[4 * BUF_COUNTER] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
-                PWM_BUF[i + 8] = (((RGB_BUF[4 * BUF_COUNTER + 1] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
-                PWM_BUF[i + 16] = (((RGB_BUF[4 * BUF_COUNTER + 2] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
-                PWM_BUF[i + 24] = (((RGB_BUF[4 * BUF_COUNTER + 3] << i) & 0x80) > 0)? PWM_HI : PWM_LO;
+                pwm_buf[i] = (((rgb_buf[4 * buf_counter] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
+                pwm_buf[i + 8] = (((rgb_buf[4 * buf_counter + 1] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
+                pwm_buf[i + 16] = (((rgb_buf[4 * buf_counter + 2] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
+                pwm_buf[i + 24] = (((rgb_buf[4 * buf_counter + 3] << i) & 0x80) > 0)? PWM_HI : PWM_LO;
 #else
-                PWM_BUF[i] = (((RGB_BUF[3 * BUF_COUNTER] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
-                PWM_BUF[i + 8] = (((RGB_BUF[3 * BUF_COUNTER + 1] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
-                PWM_BUF[i + 16] = (((RGB_BUF[3 * BUF_COUNTER + 2] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
+                pwm_buf[i] = (((rgb_buf[3 * buf_counter] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
+                pwm_buf[i + 8] = (((rgb_buf[3 * buf_counter + 1] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
+                pwm_buf[i + 16] = (((rgb_buf[3 * buf_counter + 2] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
 #endif
             }
-            BUF_COUNTER++;
+            buf_counter++;
         } 
-        else if (BUF_COUNTER < NUM_PIXELS + 2) // if RET transfer
+        else if (buf_counter < NUM_PIXELS + 2) // if RET transfer
         {
-            memset((dma_siz *) &PWM_BUF[0], 0, (PWM_BUF_LEN / 2)*sizeof(dma_siz)); // first part
-            BUF_COUNTER++;
+            memset((dma_siz *) &pwm_buf[0], 0, (PWM_BUF_LEN / 2)*sizeof(dma_siz)); // first part
+            buf_counter++;
         }
     }
     if (flags & STM32_DMA_ISR_TCIF)
     {
         // if data transfer
-        if (BUF_COUNTER < NUM_PIXELS) 
+        if (buf_counter < NUM_PIXELS) 
         {
             // fill second part of buffer
             for (volatile uint8_t i = 0; i < 8; i++) 
             {
 #ifdef SK6812
-                PWM_BUF[i + 32] = (((RGB_BUF[4 * BUF_COUNTER] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
-                PWM_BUF[i + 40] = (((RGB_BUF[4 * BUF_COUNTER + 1] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
-                PWM_BUF[i + 48] = (((RGB_BUF[4 * BUF_COUNTER + 2] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
-                PWM_BUF[i + 56] = (((RGB_BUF[4 * BUF_COUNTER + 3] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
+                pwm_buf[i + 32] = (((rgb_buf[4 * buf_counter] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
+                pwm_buf[i + 40] = (((rgb_buf[4 * buf_counter + 1] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
+                pwm_buf[i + 48] = (((rgb_buf[4 * buf_counter + 2] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
+                pwm_buf[i + 56] = (((rgb_buf[4 * buf_counter + 3] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
 #else
-                PWM_BUF[i + 24] = (((RGB_BUF[3 * BUF_COUNTER] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
-                PWM_BUF[i + 32] = (((RGB_BUF[3 * BUF_COUNTER + 1] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
-                PWM_BUF[i + 40] = (((RGB_BUF[3 * BUF_COUNTER + 2] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
+                pwm_buf[i + 24] = (((rgb_buf[3 * buf_counter] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
+                pwm_buf[i + 32] = (((rgb_buf[3 * buf_counter + 1] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
+                pwm_buf[i + 40] = (((rgb_buf[3 * buf_counter + 2] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
 #endif
             }
-            BUF_COUNTER++;
+            buf_counter++;
         } 
-        else if (BUF_COUNTER < NUM_PIXELS + 2) // if RET transfer
+        else if (buf_counter < NUM_PIXELS + 2) // if RET transfer
         {
-            memset((dma_siz *) &PWM_BUF[PWM_BUF_LEN / 2], 0, (PWM_BUF_LEN / 2)*sizeof(dma_siz)); // second part
-            BUF_COUNTER++;
+            memset((dma_siz *) &pwm_buf[PWM_BUF_LEN / 2], 0, (PWM_BUF_LEN / 2)*sizeof(dma_siz)); // second part
+            buf_counter++;
         } 
         else 
         { // if END of transfer
-            BUF_COUNTER = 0;
+            buf_counter = 0;
 
             // STOP DMA
             dmaStreamDisable(DMA_HANDLE);
@@ -528,7 +526,7 @@ void ARGB_TIM_DMADelayPulseCplt(void *param, uint32_t flags)
             TIM_HANDLE.tim->DIER &= ~STM32_TIM_DIER_CC4DE;
             pwmDisableChannelI(&TIM_HANDLE, TIM_CH);
 
-            ARGB_LOC_ST = ARGB_READY;
+            argb_lock_state = ARGB_READY;
         }
     }
 }

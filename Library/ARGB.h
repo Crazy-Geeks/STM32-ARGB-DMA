@@ -62,30 +62,30 @@
  * @addtogroup Global_entities
  * @brief All driver's methods
  * @{
- * @enum ARGB_STATE
+ * @enum argb_state
  * @brief Driver's status enum
  */
-typedef enum ARGB_STATE {
+typedef enum argb_state {
     ARGB_BUSY = 0,  ///< DMA Transfer in progress
     ARGB_READY = 1, ///< DMA Ready to transfer
     ARGB_OK = 2,    ///< Function execution success
     ARGB_PARAM_ERR = 3, ///< Error in input parameters
-} ARGB_STATE;
+} argb_state;
 
-void ARGB_Init(void);   // Initialization
-void ARGB_Clear(void);  // Clear strip
+void argb_init(void);   // Initialization
+void argb_clear(void);  // Clear strip
 
-void ARGB_SetBrightness(uint8_t br); // Set global brightness
+void argb_set_brightness(uint8_t br); // Set global brightness
 
-void ARGB_SetRGB(uint16_t i, uint8_t r, uint8_t g, uint8_t b);  // Set single LED by RGB
-void ARGB_SetHSV(uint16_t i, uint8_t hue, uint8_t sat, uint8_t val); // Set single LED by HSV
-void ARGB_SetWhite(uint16_t i, uint8_t w); // Set white component in LED (RGBW)
+void argb_set_rgb(uint16_t i, uint8_t r, uint8_t g, uint8_t b);  // Set single LED by RGB
+void argb_set_hsv(uint16_t i, uint8_t hue, uint8_t sat, uint8_t val); // Set single LED by HSV
+void argb_SetWhite(uint16_t i, uint8_t w); // Set white component in LED (RGBW)
 
-void ARGB_FillRGB(uint8_t r, uint8_t g, uint8_t b); // Fill all strip with RGB color
-void ARGB_FillHSV(uint8_t hue, uint8_t sat, uint8_t val); // Fill all strip with HSV color
-void ARGB_FillWhite(uint8_t w); // Fill all strip's white component (RGBW)
+void argb_fill_rgb(uint8_t r, uint8_t g, uint8_t b); // Fill all strip with RGB color
+void argb_fill_hsv(uint8_t hue, uint8_t sat, uint8_t val); // Fill all strip with HSV color
+void argb_fill_white(uint8_t w); // Fill all strip's white component (RGBW)
 
-ARGB_STATE ARGB_Ready(void); // Get DMA Ready state
-ARGB_STATE ARGB_Show(void); // Push data to the strip
+argb_state argb_ready(void); // Get DMA Ready state
+argb_state argb_show(void); // Push data to the strip
 
 /// @} @}
