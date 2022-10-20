@@ -41,6 +41,10 @@
 // SK6812  — RGBW, 800kHz
 
 #define NUM_PIXELS NUM_LEDS ///< Pixel quantity
+#define WS2812_START HANDLE_LEDS_START
+#define WS2812_END HANDLE_LEDS_END
+#define SK6812_START FRONT_LEDS_START
+#define SK6812_END FRONT_LEDS_END
 
 #define USE_GAMMA_CORRECTION 1 ///< Gamma-correction should fix red&green, try for yourself
 
@@ -49,12 +53,7 @@
 #define TIM_CHANNEL_3 2
 #define TIM_CHANNEL_4 3
 
-#define TIM_CH	   TIM_CHANNEL_4  ///< Timer's PWM channel
 #define TIM_HANDLE LED_TIMER
-
-#define DMA_HANDLE STM32_DMA1_STREAM6  ///< DMA Channel
-#define DMA_SIZE_WORD     ///< DMA Memory Data Width: {.._BYTE, .._HWORD, .._WORD}
-
 
 /// @}
 
@@ -91,7 +90,9 @@ void argb_set_rgb(uint16_t i, uint8_t r, uint8_t g, uint8_t b);  // Set single L
 void argb_set_hsv(uint16_t i, hsv_hue hue, uint8_t sat, uint8_t val); // Set single LED by HSV
 void argb_SetWhite(uint16_t i, uint8_t w); // Set white component in LED (RGBW)
 
+void argb_fill_rgb_range(uint16_t start, uint16_t end, uint8_t r, uint8_t g, uint8_t b); 
 void argb_fill_rgb(uint8_t r, uint8_t g, uint8_t b); // Fill all strip with RGB color
+void argb_fill_hsv_range(uint16_t start, uint16_t end, uint8_t hue, uint8_t sat, uint8_t val); 
 void argb_fill_hsv(hsv_hue hue, uint8_t sat, uint8_t val); // Fill all strip with HSV color
 void argb_fill_white(uint8_t w); // Fill all strip's white component (RGBW)
 

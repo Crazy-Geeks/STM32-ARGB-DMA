@@ -220,32 +220,20 @@ void argb_set_rgb(uint16_t i, uint8_t r, uint8_t g, uint8_t b)
 #endif
 
 // support multiple different strips with white channel
-#if defined(NEXT_LED_STRIP_START)
+#if defined(MIXED_RGB_GRB)
     // Subpixel chain order
     // RGBW or GRBW
-    if (i >= NEXT_LED_STRIP_START)
+    if ((i >= SK6812_START) && (i <= SK6812_END))
     {
-#if NEXT_LED_STRIP == SK6812_LEDS
         rgb_buf[4 * i] = r;
         rgb_buf[4 * i + 1] = g;
         rgb_buf[4 * i + 2] = b;
-#elif NEXT_LED_STRIP == WS2812_LEDS
-        rgb_buf[4 * i] = g;
-        rgb_buf[4 * i + 1] = r;
-        rgb_buf[4 * i + 2] = b;
-#endif
     }
-    else    // not next strip
+    else
     {
-#if NEXT_LED_STRIP == SK6812_LEDS
         rgb_buf[4 * i] = g;
         rgb_buf[4 * i + 1] = r;
         rgb_buf[4 * i + 2] = b;
-#elif NEXT_LED_STRIP == WS2812_LEDS
-        rgb_buf[4 * i] = r;
-        rgb_buf[4 * i + 1] = g;
-        rgb_buf[4 * i + 2] = b;
-#endif
     }
 // one type of strip
 // RGBW, GRB, or RGB
@@ -292,6 +280,12 @@ void argb_set_white(uint16_t i, uint8_t w)
     rgb_buf[4 * i + 3] = w;                // set white part
 }
 
+void argb_fill_rgb_range(uint16_t start, uint16_t end, uint8_t r, uint8_t g, uint8_t b) 
+{
+    for (volatile uint16_t i = start; i <= end; i++)
+        argb_set_rgb(i, r, g, b);
+}
+
 /**
  * @brief Fill ALL LEDs with RGB color
  * @param[in] r Red component   [0..255]
@@ -300,8 +294,14 @@ void argb_set_white(uint16_t i, uint8_t w)
  */
 void argb_fill_rgb(uint8_t r, uint8_t g, uint8_t b) 
 {
-    for (volatile uint16_t i = 0; i < NUM_PIXELS; i++)
-        argb_set_rgb(i, r, g, b);
+    argb_fill_rgb_range(0, NUM_LEDS-1, r, g, b);
+}
+
+void argb_fill_hsv_range(uint16_t start, uint16_t end, uint8_t hue, uint8_t sat, uint8_t val) 
+{
+    uint8_t _r, _g, _b;                    // init buffer color
+    hsv_to_rgb(hue, sat, val, &_r, &_g, &_b); // get color once (!)
+    argb_fill_rgb_range(start, end, _r, _g, _b);       // set color
 }
 
 /**
@@ -312,9 +312,7 @@ void argb_fill_rgb(uint8_t r, uint8_t g, uint8_t b)
  */
 void argb_fill_hsv(uint8_t hue, uint8_t sat, uint8_t val) 
 {
-    uint8_t _r, _g, _b;                    // init buffer color
-    hsv_to_rgb(hue, sat, val, &_r, &_g, &_b); // get color once (!)
-    argb_fill_rgb(_r, _g, _b);       // set color
+    argb_fill_hsv_range(0, NUM_LEDS-1, hue, sat, val);
 }
 
 /**
