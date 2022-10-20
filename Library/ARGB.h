@@ -88,7 +88,7 @@ void argb_set_brightness(uint8_t br); // Set global brightness
 
 void argb_set_rgb(uint16_t i, uint8_t r, uint8_t g, uint8_t b);  // Set single LED by RGB
 void argb_set_hsv(uint16_t i, hsv_hue hue, uint8_t sat, uint8_t val); // Set single LED by HSV
-void argb_SetWhite(uint16_t i, uint8_t w); // Set white component in LED (RGBW)
+void argb_set_white(uint16_t i, uint8_t w); // Set white component in LED (RGBW)
 
 void argb_fill_rgb_range(uint16_t start, uint16_t end, uint8_t r, uint8_t g, uint8_t b); 
 void argb_fill_rgb(uint8_t r, uint8_t g, uint8_t b); // Fill all strip with RGB color
