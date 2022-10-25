@@ -94,7 +94,7 @@ typedef uint32_t dma_siz;
 #define ARR_VAL (APB_FREQ / (800*1000)) // 800 KHz - 1.25us
 #endif
 
-#define LED_SIGNAL_RISE_DELAY_US 0.125
+#define LED_SIGNAL_RISE_DELAY_US 0.122  //0.325
 
 #if defined(WS2811F) || defined(WS2811S)
 #define PWM_HI (uint8_t) (ARR_VAL * (0.48 + LED_SIGNAL_RISE_DELAY_US)) - 1     // Log.1 - 48% - 0.60us/1.2us
@@ -315,14 +315,19 @@ void argb_fill_hsv(uint8_t hue, uint8_t sat, uint8_t val)
     argb_fill_hsv_range(0, NUM_LEDS-1, hue, sat, val);
 }
 
+void argb_fill_white_range(uint16_t start, uint16_t end, uint8_t w) 
+{
+    for (volatile uint16_t i = start; i <= end; i++)
+        argb_set_white(i, w);
+}
+
 /**
  * @brief Set ALL White components in strip
  * @param[in] w White component [0..255]
  */
 void argb_fill_white(uint8_t w) 
 {
-    for (volatile uint16_t i = 0; i < NUM_PIXELS; i++)
-        argb_set_white(i, w);
+    argb_fill_white_range(0, NUM_LEDS-1, w);
 }
 
 /**

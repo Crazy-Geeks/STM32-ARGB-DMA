@@ -94,6 +94,7 @@ void argb_fill_rgb_range(uint16_t start, uint16_t end, uint8_t r, uint8_t g, uin
 void argb_fill_rgb(uint8_t r, uint8_t g, uint8_t b); // Fill all strip with RGB color
 void argb_fill_hsv_range(uint16_t start, uint16_t end, uint8_t hue, uint8_t sat, uint8_t val); 
 void argb_fill_hsv(hsv_hue hue, uint8_t sat, uint8_t val); // Fill all strip with HSV color
+void argb_fill_white_range(uint16_t start, uint16_t end, uint8_t w);
 void argb_fill_white(uint8_t w); // Fill all strip's white component (RGBW)
 
 argb_state argb_ready(void); // Get DMA Ready state
