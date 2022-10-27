@@ -108,12 +108,12 @@ typedef uint32_t dma_siz;
 #define PWM_LO (uint8_t) (ARR_VAL * (0.20 + LED_SIGNAL_RISE_DELAY_US)) - 1     // Log.0 - 20% - 0.25us/0.5us
 
 #elif defined(WS2812)
-#define PWM_HI (uint8_t) (ARR_VAL * (0.56 + LED_SIGNAL_RISE_DELAY_US)) - 1     // Log.1 - 56% - 0.70us
-#define PWM_LO (uint8_t) (ARR_VAL * (0.28 + LED_SIGNAL_RISE_DELAY_US)) - 1     // Log.0 - 28% - 0.35us
+#define WS2812_PWM_HI (uint8_t) (ARR_VAL * (0.583 + LED_SIGNAL_RISE_DELAY_US)) - 1     // Log.1 - 56% - 0.70us
+#define WS2812_PWM_LO (uint8_t) (ARR_VAL * (0.2916 + LED_SIGNAL_RISE_DELAY_US)) - 1     // Log.0 - 28% - 0.35us
 
 #elif defined(SK6812)
-#define PWM_HI (uint8_t) (ARR_VAL * (0.48 + LED_SIGNAL_RISE_DELAY_US)) - 1     // Log.1 - 48% - 0.60us
-#define PWM_LO (uint8_t) (ARR_VAL * (0.24 + LED_SIGNAL_RISE_DELAY_US)) - 1     // Log.0 - 24% - 0.30us
+#define PWM_HI (uint8_t) (ARR_VAL * (0.5 + LED_SIGNAL_RISE_DELAY_US)) - 1     // Log.1 - 48% - 0.60us
+#define PWM_LO (uint8_t) (ARR_VAL * (0.25 + LED_SIGNAL_RISE_DELAY_US)) - 1     // Log.0 - 24% - 0.30us
 #endif
 
 #ifdef SK6812
