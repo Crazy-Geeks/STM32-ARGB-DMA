@@ -94,19 +94,26 @@ typedef uint32_t dma_siz;
 #define ARR_VAL (APB_FREQ / (800*1000)) // 800 KHz - 1.25us
 #endif
 
-#define LED_SIGNAL_RISE_DELAY_US 0.122  //0.325
+#define LED_SIGNAL_RISE_DELAY_US 0//.22
 
-#if defined(WS2811F) || defined(WS2811S)
+#if defined(MIXED_RGB_GRB)
+#define WS2812_PWM_HI (uint8_t) (ARR_VAL * (0.583 + LED_SIGNAL_RISE_DELAY_US)) - 1     // Log.1 - 56% - 0.70us
+#define WS2812_PWM_LO (uint8_t) (ARR_VAL * (0.2916 + LED_SIGNAL_RISE_DELAY_US)) - 1     // Log.0 - 28% - 0.35us
+
+#define SK6812_PWM_HI (uint8_t) (ARR_VAL * (0.5 + LED_SIGNAL_RISE_DELAY_US)) - 1     // Log.1 - 48% - 0.60us
+#define SK6812_PWM_LO (uint8_t) (ARR_VAL * (0.25 + LED_SIGNAL_RISE_DELAY_US)) - 1     // Log.0 - 24% - 0.30us
+
+#elif defined(WS2811F) || defined(WS2811S)
 #define PWM_HI (uint8_t) (ARR_VAL * (0.48 + LED_SIGNAL_RISE_DELAY_US)) - 1     // Log.1 - 48% - 0.60us/1.2us
 #define PWM_LO (uint8_t) (ARR_VAL * (0.20 + LED_SIGNAL_RISE_DELAY_US)) - 1     // Log.0 - 20% - 0.25us/0.5us
 
 #elif defined(WS2812)
-#define PWM_HI (uint8_t) (ARR_VAL * (0.56 + LED_SIGNAL_RISE_DELAY_US)) - 1     // Log.1 - 56% - 0.70us
-#define PWM_LO (uint8_t) (ARR_VAL * (0.28 + LED_SIGNAL_RISE_DELAY_US)) - 1     // Log.0 - 28% - 0.35us
+#define WS2812_PWM_HI (uint8_t) (ARR_VAL * (0.583 + LED_SIGNAL_RISE_DELAY_US)) - 1     // Log.1 - 56% - 0.70us
+#define WS2812_PWM_LO (uint8_t) (ARR_VAL * (0.2916 + LED_SIGNAL_RISE_DELAY_US)) - 1     // Log.0 - 28% - 0.35us
 
 #elif defined(SK6812)
-#define PWM_HI (uint8_t) (ARR_VAL * (0.48 + LED_SIGNAL_RISE_DELAY_US)) - 1     // Log.1 - 48% - 0.60us
-#define PWM_LO (uint8_t) (ARR_VAL * (0.24 + LED_SIGNAL_RISE_DELAY_US)) - 1     // Log.0 - 24% - 0.30us
+#define PWM_HI (uint8_t) (ARR_VAL * (0.5 + LED_SIGNAL_RISE_DELAY_US)) - 1     // Log.1 - 48% - 0.60us
+#define PWM_LO (uint8_t) (ARR_VAL * (0.25 + LED_SIGNAL_RISE_DELAY_US)) - 1     // Log.0 - 24% - 0.30us
 #endif
 
 #ifdef SK6812
@@ -130,7 +137,7 @@ static const PWMConfig pwm2_conf =
         {PWM_OUTPUT_DISABLED,   NULL},
         {PWM_OUTPUT_DISABLED,   NULL},
         {PWM_OUTPUT_DISABLED,   NULL},
-        {PWM_OUTPUT_ACTIVE_LOW, NULL}
+        {PWM_OUTPUT_ACTIVE_HIGH, NULL}
     },
     0,
     0  
@@ -146,6 +153,13 @@ volatile uint16_t buf_counter = 0;
 
 volatile uint8_t argb_brightness = 255;     ///< LED Global brightness
 volatile argb_state argb_lock_state; ///< Buffer send status
+
+// get around -Werror=type-limits
+static const uint16_t ws2812_start = WS2812_START;
+static const uint16_t ws2812_end = WS2812_END;
+static const uint16_t sk6812_start = SK6812_START;
+static const uint16_t sk6812_end = SK6812_END;
+
 
 static inline uint8_t scale8(uint8_t x, uint8_t scale); // Gamma correction
 static void hsv_to_rgb(uint8_t hue, uint8_t sat, uint8_t val, uint8_t *_r, uint8_t *_g, uint8_t *_b);
@@ -223,13 +237,13 @@ void argb_set_rgb(uint16_t i, uint8_t r, uint8_t g, uint8_t b)
 #if defined(MIXED_RGB_GRB)
     // Subpixel chain order
     // RGBW or GRBW
-    if ((i >= SK6812_START) && (i <= SK6812_END))
+    if ((i >= sk6812_start) && (i <= sk6812_end))
     {
         rgb_buf[4 * i] = r;
         rgb_buf[4 * i + 1] = g;
         rgb_buf[4 * i + 2] = b;
     }
-    else
+    else if ((i >= ws2812_start) && (i <= ws2812_end))
     {
         rgb_buf[4 * i] = g;
         rgb_buf[4 * i + 1] = r;
@@ -358,6 +372,32 @@ argb_state argb_show(void)
     {
         for (volatile uint8_t i = 0; i < 8; i++) 
         {
+#if defined(MIXED_RGB_GRB)
+            // if the first LEDs are SK6812
+            if (sk6812_start == 0)
+            {
+                // set first transfer from first values
+                pwm_buf[i] = (((rgb_buf[0] << i) & 0x80) > 0) ?      SK6812_PWM_HI : SK6812_PWM_LO;
+                pwm_buf[i + 8] = (((rgb_buf[1] << i) & 0x80) > 0) ?  SK6812_PWM_HI : SK6812_PWM_LO;
+                pwm_buf[i + 16] = (((rgb_buf[2] << i) & 0x80) > 0) ? SK6812_PWM_HI : SK6812_PWM_LO;
+                pwm_buf[i + 24] = (((rgb_buf[3] << i) & 0x80) > 0) ? SK6812_PWM_HI : SK6812_PWM_LO;
+                pwm_buf[i + 32] = (((rgb_buf[4] << i) & 0x80) > 0) ? SK6812_PWM_HI : SK6812_PWM_LO;
+                pwm_buf[i + 40] = (((rgb_buf[5] << i) & 0x80) > 0) ? SK6812_PWM_HI : SK6812_PWM_LO;
+                pwm_buf[i + 48] = (((rgb_buf[6] << i) & 0x80) > 0) ? SK6812_PWM_HI : SK6812_PWM_LO;
+                pwm_buf[i + 56] = (((rgb_buf[7] << i) & 0x80) > 0) ? SK6812_PWM_HI : SK6812_PWM_LO;
+            }
+            else if (ws2812_start == 0)
+            {
+                pwm_buf[i] = (((rgb_buf[0] << i) & 0x80) > 0) ?      WS2812_PWM_HI : WS2812_PWM_LO;
+                pwm_buf[i + 8] = (((rgb_buf[1] << i) & 0x80) > 0) ?  WS2812_PWM_HI : WS2812_PWM_LO;
+                pwm_buf[i + 16] = (((rgb_buf[2] << i) & 0x80) > 0) ? WS2812_PWM_HI : WS2812_PWM_LO;
+                pwm_buf[i + 24] = (((rgb_buf[3] << i) & 0x80) > 0) ? WS2812_PWM_HI : WS2812_PWM_LO;
+                pwm_buf[i + 32] = (((rgb_buf[4] << i) & 0x80) > 0) ? WS2812_PWM_HI : WS2812_PWM_LO;
+                pwm_buf[i + 40] = (((rgb_buf[5] << i) & 0x80) > 0) ? WS2812_PWM_HI : WS2812_PWM_LO;
+                pwm_buf[i + 48] = (((rgb_buf[6] << i) & 0x80) > 0) ? WS2812_PWM_HI : WS2812_PWM_LO;
+                pwm_buf[i + 56] = (((rgb_buf[7] << i) & 0x80) > 0) ? WS2812_PWM_HI : WS2812_PWM_LO;
+            }
+#else
             // set first transfer from first values
             pwm_buf[i] = (((rgb_buf[0] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
             pwm_buf[i + 8] = (((rgb_buf[1] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
@@ -368,6 +408,7 @@ argb_state argb_show(void)
 #ifdef SK6812
             pwm_buf[i + 48] = (((rgb_buf[6] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
             pwm_buf[i + 56] = (((rgb_buf[7] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
+#endif
 #endif
         }
 
@@ -380,6 +421,7 @@ argb_state argb_show(void)
 
         // enable TIM DMA requests
         TIM_HANDLE.tim->DIER |= STM32_TIM_DIER_CC4DE;
+        TIM_HANDLE.tim->CNT = 0;
         pwmEnableChannel(&TIM_HANDLE, TIM_CH, 0);
 
         buf_counter = 2;
@@ -473,6 +515,22 @@ void argb_tim_dma_delay_pulse(void *param, uint32_t flags)
             // fill first part of buffer
             for (volatile uint8_t i = 0; i < 8; i++) 
             {
+#if defined(MIXED_RGB_GRB)
+                if ((buf_counter >= sk6812_start) && (buf_counter <= sk6812_end))
+                {
+                    pwm_buf[i] = (((rgb_buf[4 * buf_counter] << i) & 0x80) > 0) ?          SK6812_PWM_HI : SK6812_PWM_LO;
+                    pwm_buf[i + 8] = (((rgb_buf[4 * buf_counter + 1] << i) & 0x80) > 0) ?  SK6812_PWM_HI : SK6812_PWM_LO;
+                    pwm_buf[i + 16] = (((rgb_buf[4 * buf_counter + 2] << i) & 0x80) > 0) ? SK6812_PWM_HI : SK6812_PWM_LO;
+                    pwm_buf[i + 24] = (((rgb_buf[4 * buf_counter + 3] << i) & 0x80) > 0)?  SK6812_PWM_HI : SK6812_PWM_LO;
+                }
+                else if ((buf_counter >= ws2812_start) && (buf_counter <= ws2812_end))
+                {
+                    pwm_buf[i] = (((rgb_buf[4 * buf_counter] << i) & 0x80) > 0) ?          WS2812_PWM_HI : WS2812_PWM_LO;
+                    pwm_buf[i + 8] = (((rgb_buf[4 * buf_counter + 1] << i) & 0x80) > 0) ?  WS2812_PWM_HI : WS2812_PWM_LO;
+                    pwm_buf[i + 16] = (((rgb_buf[4 * buf_counter + 2] << i) & 0x80) > 0) ? WS2812_PWM_HI : WS2812_PWM_LO;
+                    pwm_buf[i + 24] = (((rgb_buf[4 * buf_counter + 3] << i) & 0x80) > 0)?  WS2812_PWM_HI : WS2812_PWM_LO;
+                }
+#else
 #ifdef SK6812
                 pwm_buf[i] = (((rgb_buf[4 * buf_counter] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
                 pwm_buf[i + 8] = (((rgb_buf[4 * buf_counter + 1] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
@@ -482,6 +540,7 @@ void argb_tim_dma_delay_pulse(void *param, uint32_t flags)
                 pwm_buf[i] = (((rgb_buf[3 * buf_counter] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
                 pwm_buf[i + 8] = (((rgb_buf[3 * buf_counter + 1] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
                 pwm_buf[i + 16] = (((rgb_buf[3 * buf_counter + 2] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
+#endif
 #endif
             }
             buf_counter++;
@@ -500,6 +559,22 @@ void argb_tim_dma_delay_pulse(void *param, uint32_t flags)
             // fill second part of buffer
             for (volatile uint8_t i = 0; i < 8; i++) 
             {
+#if defined(MIXED_RGB_GRB)
+                if ((buf_counter >= sk6812_start) && (buf_counter <= sk6812_end))
+                {
+                    pwm_buf[i + 32] = (((rgb_buf[4 * buf_counter] << i) & 0x80) > 0) ?     SK6812_PWM_HI : SK6812_PWM_LO;
+                    pwm_buf[i + 40] = (((rgb_buf[4 * buf_counter + 1] << i) & 0x80) > 0) ? SK6812_PWM_HI : SK6812_PWM_LO;
+                    pwm_buf[i + 48] = (((rgb_buf[4 * buf_counter + 2] << i) & 0x80) > 0) ? SK6812_PWM_HI : SK6812_PWM_LO;
+                    pwm_buf[i + 56] = (((rgb_buf[4 * buf_counter + 3] << i) & 0x80) > 0) ? SK6812_PWM_HI : SK6812_PWM_LO;
+                }
+                else if ((buf_counter >= ws2812_start) && (buf_counter <= ws2812_end))
+                {
+                    pwm_buf[i + 32] = (((rgb_buf[4 * buf_counter] << i) & 0x80) > 0) ?     WS2812_PWM_HI : WS2812_PWM_LO;
+                    pwm_buf[i + 40] = (((rgb_buf[4 * buf_counter + 1] << i) & 0x80) > 0) ? WS2812_PWM_HI : WS2812_PWM_LO;
+                    pwm_buf[i + 48] = (((rgb_buf[4 * buf_counter + 2] << i) & 0x80) > 0) ? WS2812_PWM_HI : WS2812_PWM_LO;
+                    pwm_buf[i + 56] = (((rgb_buf[4 * buf_counter + 3] << i) & 0x80) > 0) ? WS2812_PWM_HI : WS2812_PWM_LO;
+                }
+#else
 #ifdef SK6812
                 pwm_buf[i + 32] = (((rgb_buf[4 * buf_counter] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
                 pwm_buf[i + 40] = (((rgb_buf[4 * buf_counter + 1] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
@@ -509,6 +584,7 @@ void argb_tim_dma_delay_pulse(void *param, uint32_t flags)
                 pwm_buf[i + 24] = (((rgb_buf[3 * buf_counter] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
                 pwm_buf[i + 32] = (((rgb_buf[3 * buf_counter + 1] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
                 pwm_buf[i + 40] = (((rgb_buf[3 * buf_counter + 2] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
+#endif
 #endif
             }
             buf_counter++;
