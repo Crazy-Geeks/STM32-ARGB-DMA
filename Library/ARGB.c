@@ -49,8 +49,9 @@
  *
  */
 
-#include "ARGB.h"  // include header file
-#include "board.h"
+#include "ARGB.h"
+#include "stm32_dma.h"
+#include "pwm.h"
 #include "math.h"
 #include <string.h>
 
@@ -94,7 +95,7 @@ typedef uint32_t dma_siz;
 #define ARR_VAL (APB_FREQ / (800*1000)) // 800 KHz - 1.25us
 #endif
 
-#define LED_SIGNAL_RISE_DELAY_US 0//.22
+#define LED_SIGNAL_RISE_DELAY_US 0 //0.125
 
 #if defined(MIXED_RGB_GRB)
 #define WS2812_PWM_HI (uint8_t) (ARR_VAL * (0.583 + LED_SIGNAL_RISE_DELAY_US)) - 1     // Log.1 - 56% - 0.70us
@@ -137,7 +138,7 @@ static const PWMConfig pwm2_conf =
         {PWM_OUTPUT_DISABLED,   NULL},
         {PWM_OUTPUT_DISABLED,   NULL},
         {PWM_OUTPUT_DISABLED,   NULL},
-        {PWM_OUTPUT_ACTIVE_HIGH, NULL}
+        {LED_PWM_ACTIVE_EDGE, NULL}
     },
     0,
     0  
