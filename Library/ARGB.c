@@ -95,8 +95,6 @@ typedef uint32_t dma_siz;
 #define ARR_VAL (APB_FREQ / (800*1000)) // 800 KHz - 1.25us
 #endif
 
-#define LED_SIGNAL_RISE_DELAY_US 0 //0.125
-
 #if defined(MIXED_RGB_GRB)
 #define WS2812_PWM_HI (uint8_t) (ARR_VAL * (0.583 + LED_SIGNAL_RISE_DELAY_US)) - 1     // Log.1 - 56% - 0.70us
 #define WS2812_PWM_LO (uint8_t) (ARR_VAL * (0.2916 + LED_SIGNAL_RISE_DELAY_US)) - 1     // Log.0 - 28% - 0.35us
@@ -423,6 +421,7 @@ argb_state argb_show(void)
         // enable TIM DMA requests
         TIM_HANDLE.tim->DIER |= STM32_TIM_DIER_CC4DE;
         TIM_HANDLE.tim->CNT = 0;
+        TIM_HANDLE.tim->CR1 |= STM32_TIM_CR1_CEN;
         pwmEnableChannel(&TIM_HANDLE, TIM_CH, 0);
 
         buf_counter = 2;
@@ -605,6 +604,7 @@ void argb_tim_dma_delay_pulse(void *param, uint32_t flags)
             /* Disable the Peripheral */
             TIM_HANDLE.tim->DIER &= ~STM32_TIM_DIER_CC4DE;
             pwmDisableChannelI(&TIM_HANDLE, TIM_CH);
+            TIM_HANDLE.tim->CR1 &= ~STM32_TIM_CR1_CEN;
 
             argb_lock_state = ARGB_READY;
         }

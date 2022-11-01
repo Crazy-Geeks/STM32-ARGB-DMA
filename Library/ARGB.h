@@ -47,6 +47,8 @@
 
 #define TIM_HANDLE LED_TIMER
 
+#define LED_SIGNAL_RISE_DELAY_US LED_PWM_RISE_DELAY_US
+
 /// @}
 
 /**
