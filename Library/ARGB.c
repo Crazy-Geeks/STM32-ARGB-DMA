@@ -129,7 +129,7 @@ typedef uint32_t dma_siz;
 
 static const PWMConfig pwm2_conf = 
 {
-    STM32_TIMCLK1,
+    APB_FREQ,
     ARR_VAL - 1,
     NULL,
     {
