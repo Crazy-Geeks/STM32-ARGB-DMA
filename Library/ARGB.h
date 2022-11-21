@@ -68,14 +68,62 @@ typedef enum argb_state {
     ARGB_PARAM_ERR = 3, ///< Error in input parameters
 } argb_state;
 
+// stolen from https://github.com/FastLED/FastLED
+typedef struct {
+	union {
+		struct {
+            union {
+                uint8_t r;
+                uint8_t red;
+            };
+            union {
+                uint8_t g;
+                uint8_t green;
+            };
+            union {
+                uint8_t b;
+                uint8_t blue;
+            };
+        };
+		uint8_t raw[3];
+	};
+} rgb_t;
+
+typedef struct {
+    union {
+		struct {
+		    union {
+		        uint8_t hue;
+		        uint8_t h; };
+		    union {
+		        uint8_t saturation;
+		        uint8_t sat;
+		        uint8_t s; };
+		    union {
+		        uint8_t value;
+		        uint8_t val;
+		        uint8_t v; };
+		};
+		uint8_t raw[3];
+	};
+} hsv_t;
+
 typedef enum 
 {
-    HUE_RED    = 0,
-    HUE_YELLOW = 42,
-    HUE_GREEN  = 85,
-    HUE_AQUA   = 128,
-    HUE_BLUE   = 171,
-    HUE_PURPLE = 213
+    // HUE_RED    = 0,
+    // HUE_YELLOW = 42,
+    // HUE_GREEN  = 85,
+    // HUE_AQUA   = 128,
+    // HUE_BLUE   = 171,
+    // HUE_PURPLE = 213
+    HUE_RED = 0,
+    HUE_ORANGE = 32,
+    HUE_YELLOW = 64,
+    HUE_GREEN = 96,
+    HUE_AQUA = 128,
+    HUE_BLUE = 160,
+    HUE_PURPLE = 192,
+    HUE_PINK = 224
 } hsv_hue;
 
 void argb_init(void);   // Initialization
@@ -93,6 +141,10 @@ void argb_fill_hsv_range(uint16_t start, uint16_t end, uint8_t hue, uint8_t sat,
 void argb_fill_hsv(hsv_hue hue, uint8_t sat, uint8_t val); // Fill all strip with HSV color
 void argb_fill_white_range(uint16_t start, uint16_t end, uint8_t w);
 void argb_fill_white(uint8_t w); // Fill all strip's white component (RGBW)
+
+void hsv2rgb_spectrum( const hsv_t hsv, rgb_t * rgb);
+
+hsv_t argb_get_hue(uint16_t i);
 
 argb_state argb_ready(void); // Get DMA Ready state
 argb_state argb_show(void); // Push data to the strip
