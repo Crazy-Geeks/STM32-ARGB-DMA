@@ -34,13 +34,6 @@
 
 #define NUM_PIXELS NUM_LEDS ///< Pixel quantity
 
-#if defined(MIXED_RGB_GRB)
-#define WS2812_START HANDLE_LEDS_START
-#define WS2812_END HANDLE_LEDS_END
-#define SK6812_START FRONT_LEDS_START
-#define SK6812_END FRONT_LEDS_END
-#endif
-
 #define USE_GAMMA_CORRECTION 1 ///< Gamma-correction should fix red&green, try for yourself
 
 #define TIM_CHANNEL_1 0
