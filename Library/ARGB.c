@@ -53,6 +53,7 @@
 #include "stm32_dma.h"
 #include "pwm.h"
 #include "math.h"
+#include "fast_math.h"
 #include <string.h>
 
 /**
@@ -95,27 +96,46 @@ typedef uint32_t dma_siz;
 #define ARR_VAL (APB_FREQ / (800*1000)) // 800 KHz - 1.25us
 #endif
 
+#if defined(WS2811F) || defined(WS2811S)
+#define WS2811_PWM_HI (uint8_t) (ARR_VAL * (0.48 + LED_SIGNAL_RISE_DELAY_US)) - 1     // Log.1 - 48% - 0.60us/1.2us
+#define WS2811_PWM_LO (uint8_t) (ARR_VAL * (0.20 + LED_SIGNAL_RISE_DELAY_US)) - 1     // Log.0 - 20% - 0.25us/0.5us
+
 #if defined(MIXED_RGB_GRB)
-#define WS2812_PWM_HI (uint8_t) (ARR_VAL * (0.583 + LED_SIGNAL_RISE_DELAY_US)) - 1     // Log.1 - 56% - 0.70us
-#define WS2812_PWM_LO (uint8_t) (ARR_VAL * (0.2916 + LED_SIGNAL_RISE_DELAY_US)) - 1     // Log.0 - 28% - 0.35us
-
-#define SK6812_PWM_HI (uint8_t) (ARR_VAL * (0.5 + LED_SIGNAL_RISE_DELAY_US)) - 1     // Log.1 - 48% - 0.60us
-#define SK6812_PWM_LO (uint8_t) (ARR_VAL * (0.25 + LED_SIGNAL_RISE_DELAY_US)) - 1     // Log.0 - 24% - 0.30us
-
-#elif defined(WS2811F) || defined(WS2811S)
-#define PWM_HI (uint8_t) (ARR_VAL * (0.48 + LED_SIGNAL_RISE_DELAY_US)) - 1     // Log.1 - 48% - 0.60us/1.2us
-#define PWM_LO (uint8_t) (ARR_VAL * (0.20 + LED_SIGNAL_RISE_DELAY_US)) - 1     // Log.0 - 20% - 0.25us/0.5us
-
-#elif defined(WS2812)
-#define WS2812_PWM_HI (uint8_t) (ARR_VAL * (0.583 + LED_SIGNAL_RISE_DELAY_US)) - 1     // Log.1 - 56% - 0.70us
-#define WS2812_PWM_LO (uint8_t) (ARR_VAL * (0.2916 + LED_SIGNAL_RISE_DELAY_US)) - 1     // Log.0 - 28% - 0.35us
-
-#elif defined(SK6812)
-#define PWM_HI (uint8_t) (ARR_VAL * (0.5 + LED_SIGNAL_RISE_DELAY_US)) - 1     // Log.1 - 48% - 0.60us
-#define PWM_LO (uint8_t) (ARR_VAL * (0.25 + LED_SIGNAL_RISE_DELAY_US)) - 1     // Log.0 - 24% - 0.30us
+#define RGB_PWM_HI WS2811_PWM_HI
+#define RGB_PWM_LO WS2811_PWM_LO
+#else
+#define PWM_HI WS2811_PWM_HI
+#define PWM_LO WS2811_PWM_LO
+#endif
 #endif
 
-#ifdef SK6812
+#if defined(WS2812)
+#define WS2812_PWM_HI (uint8_t) (ARR_VAL * (0.56 + LED_SIGNAL_RISE_DELAY_US)) - 1     // Log.1 - 56% - 0.70us
+#define WS2812_PWM_LO (uint8_t) (ARR_VAL * (0.28 + LED_SIGNAL_RISE_DELAY_US)) - 1     // Log.0 - 28% - 0.35us
+
+#if defined(MIXED_RGB_GRB)
+#define GRB_PWM_HI WS2812_PWM_HI
+#define GRB_PWM_LO WS2812_PWM_LO
+#else
+#define PWM_HI WS2812_PWM_HI
+#define PWM_LO WS2812_PWM_LO
+#endif
+#endif
+
+#if defined(SK6812)
+#define SK6812_PWM_HI (uint8_t) (ARR_VAL * (0.48 + LED_SIGNAL_RISE_DELAY_US)) - 1     // Log.1 - 48% - 0.60us
+#define SK6812_PWM_LO (uint8_t) (ARR_VAL * (0.24 + LED_SIGNAL_RISE_DELAY_US)) - 1     // Log.0 - 24% - 0.30us
+
+#if defined(MIXED_RGB_GRB)
+#define GRB_PWM_HI SK6812_PWM_HI
+#define GRB_PWM_LO SK6812_PWM_LO
+#else
+#define PWM_HI SK6812_PWM_HI
+#define PWM_LO SK6812_PWM_LO
+#endif
+#endif
+
+#if defined(RGBW)
 #define NUM_BYTES (4 * NUM_PIXELS) ///< Strip size in bytes
 #define PWM_BUF_LEN (4 * 8 * 2)    ///< Pack len * 8 bit * 2 LEDs
 #else
@@ -126,6 +146,10 @@ typedef uint32_t dma_siz;
 #define DMA_MODE (STM32_DMA_CR_DIR_M2P | STM32_DMA_CR_CIRC | \
                   STM32_DMA_CR_HTIE | STM32_DMA_CR_TCIE  | STM32_DMA_CR_MINC | \
                   STM32_DMA_CR_PSIZE_WORD | STM32_DMA_CR_MSIZE_WORD | STM32_DMA_CR_CHSEL(3))
+
+#define APPLY_DIMMING(X) (X)
+#define HSV_SECTION_6 (0x20)
+#define HSV_SECTION_3 (0x40)
 
 static const PWMConfig pwm2_conf = 
 {
@@ -154,14 +178,15 @@ volatile uint8_t argb_brightness = 255;     ///< LED Global brightness
 volatile argb_state argb_lock_state; ///< Buffer send status
 
 // get around -Werror=type-limits
-static const uint16_t ws2812_start = WS2812_START;
-static const uint16_t ws2812_end = WS2812_END;
-static const uint16_t sk6812_start = SK6812_START;
-static const uint16_t sk6812_end = SK6812_END;
+#if defined(MIXED_RGB_GRB)
+static const uint16_t rgb_start = RGB_START;
+static const uint16_t rgb_end = RGB_END;
+static const uint16_t grb_start = GRB_START;
+static const uint16_t grb_end = GRB_END;
+#endif
 
 
 static inline uint8_t scale8(uint8_t x, uint8_t scale); // Gamma correction
-static void hsv_to_rgb(uint8_t hue, uint8_t sat, uint8_t val, uint8_t *_r, uint8_t *_g, uint8_t *_b);
 
 static void argb_tim_dma_delay_pulse(void *param, uint32_t flags);
 /// @} //Private
@@ -195,7 +220,7 @@ void argb_init(void)
 void argb_clear(void) 
 {
     argb_fill_rgb(0, 0, 0);
-#ifdef SK6812
+#ifdef RGBW
     argb_fill_white(0);
 #endif
 }
@@ -233,26 +258,45 @@ void argb_set_rgb(uint16_t i, uint8_t r, uint8_t g, uint8_t b)
 #endif
 
 // support multiple different strips with white channel
-#if defined(MIXED_RGB_GRB)
+#if defined(MIXED_RGB_GRB) && defined(RGBW)
     // Subpixel chain order
     // RGBW or GRBW
-    if ((i >= sk6812_start) && (i <= sk6812_end))
+    if ((i >= rgb_start) && (i <= rgb_end))
     {
         rgb_buf[4 * i] = r;
         rgb_buf[4 * i + 1] = g;
         rgb_buf[4 * i + 2] = b;
     }
-    else if ((i >= ws2812_start) && (i <= ws2812_end))
+    else if ((i >= grb_start) && (i <= grb_end))
     {
         rgb_buf[4 * i] = g;
         rgb_buf[4 * i + 1] = r;
         rgb_buf[4 * i + 2] = b;
     }
+#elif defined(MIXED_RGB_GRB) && !defined(RGBW)
+    // Subpixel chain order
+    // RGBW or GRBW
+    if ((i >= rgb_start) && (i <= rgb_end))
+    {
+        rgb_buf[3 * i] = r;
+        rgb_buf[3 * i + 1] = g;
+        rgb_buf[3 * i + 2] = b;
+    }
+    else if ((i >= grb_start) && (i <= grb_end))
+    {
+        rgb_buf[3 * i] = g;
+        rgb_buf[3 * i + 1] = r;
+        rgb_buf[3 * i + 2] = b;
+    }
 // one type of strip
 // RGBW, GRB, or RGB
-#elif defined(SK6812)
+#elif defined(SK6812) && defined(RGBW)
     rgb_buf[4 * i] = r;
     rgb_buf[4 * i + 1] = g;
+    rgb_buf[4 * i + 2] = b;
+#elif defined(WS2812) && defined(RGBW)
+    rgb_buf[4 * i] = g;
+    rgb_buf[4 * i + 1] = r;
     rgb_buf[4 * i + 2] = b;
 #elif defined(WS2812)
     rgb_buf[3 * i] = g;
@@ -274,9 +318,10 @@ void argb_set_rgb(uint16_t i, uint8_t r, uint8_t g, uint8_t b)
  */
 void argb_set_hsv(uint16_t i, uint8_t hue, uint8_t sat, uint8_t val) 
 {
-    uint8_t _r, _g, _b;                    // init buffer color
-    hsv_to_rgb(hue, sat, val, &_r, &_g, &_b); // get RGB color
-    argb_set_rgb(i, _r, _g, _b);     // set color
+    rgb_t rgb = {.r=0, .g=0, .b=0};
+    hsv_t hsv = {.h=hue, .s=sat, .v=val};
+    hsv2rgb_spectrum(hsv, &rgb); // get RGB color
+    argb_set_rgb(i, rgb.r, rgb.g, rgb.b);     // set color
 }
 
 /**
@@ -286,7 +331,7 @@ void argb_set_hsv(uint16_t i, uint8_t hue, uint8_t sat, uint8_t val)
  */
 void argb_set_white(uint16_t i, uint8_t w) 
 {
-#ifdef RGB
+#if !defined(RGBW)
     return;
 #endif
     w /= 256 / ((uint16_t) argb_brightness + 1); // set brightness
@@ -312,9 +357,10 @@ void argb_fill_rgb(uint8_t r, uint8_t g, uint8_t b)
 
 void argb_fill_hsv_range(uint16_t start, uint16_t end, uint8_t hue, uint8_t sat, uint8_t val) 
 {
-    uint8_t _r, _g, _b;                    // init buffer color
-    hsv_to_rgb(hue, sat, val, &_r, &_g, &_b); // get color once (!)
-    argb_fill_rgb_range(start, end, _r, _g, _b);       // set color
+    rgb_t rgb = {.r=0, .g=0, .b=0};
+    hsv_t hsv = {.h=hue, .s=sat, .v=val};
+    hsv2rgb_spectrum(hsv, &rgb); // get color once (!)
+    argb_fill_rgb_range(start, end, rgb.r, rgb.g, rgb.b);       // set color
 }
 
 /**
@@ -373,28 +419,32 @@ argb_state argb_show(void)
         {
 #if defined(MIXED_RGB_GRB)
             // if the first LEDs are SK6812
-            if (sk6812_start == 0)
+            if (grb_start == 0)
             {
                 // set first transfer from first values
-                pwm_buf[i] = (((rgb_buf[0] << i) & 0x80) > 0) ?      SK6812_PWM_HI : SK6812_PWM_LO;
-                pwm_buf[i + 8] = (((rgb_buf[1] << i) & 0x80) > 0) ?  SK6812_PWM_HI : SK6812_PWM_LO;
-                pwm_buf[i + 16] = (((rgb_buf[2] << i) & 0x80) > 0) ? SK6812_PWM_HI : SK6812_PWM_LO;
-                pwm_buf[i + 24] = (((rgb_buf[3] << i) & 0x80) > 0) ? SK6812_PWM_HI : SK6812_PWM_LO;
-                pwm_buf[i + 32] = (((rgb_buf[4] << i) & 0x80) > 0) ? SK6812_PWM_HI : SK6812_PWM_LO;
-                pwm_buf[i + 40] = (((rgb_buf[5] << i) & 0x80) > 0) ? SK6812_PWM_HI : SK6812_PWM_LO;
-                pwm_buf[i + 48] = (((rgb_buf[6] << i) & 0x80) > 0) ? SK6812_PWM_HI : SK6812_PWM_LO;
-                pwm_buf[i + 56] = (((rgb_buf[7] << i) & 0x80) > 0) ? SK6812_PWM_HI : SK6812_PWM_LO;
+                pwm_buf[i] = (((rgb_buf[0] << i) & 0x80) > 0) ?      GRB_PWM_HI : GRB_PWM_LO;
+                pwm_buf[i + 8] = (((rgb_buf[1] << i) & 0x80) > 0) ?  GRB_PWM_HI : GRB_PWM_LO;
+                pwm_buf[i + 16] = (((rgb_buf[2] << i) & 0x80) > 0) ? GRB_PWM_HI : GRB_PWM_LO;
+                pwm_buf[i + 24] = (((rgb_buf[3] << i) & 0x80) > 0) ? GRB_PWM_HI : GRB_PWM_LO;
+                pwm_buf[i + 32] = (((rgb_buf[4] << i) & 0x80) > 0) ? GRB_PWM_HI : GRB_PWM_LO;
+                pwm_buf[i + 40] = (((rgb_buf[5] << i) & 0x80) > 0) ? GRB_PWM_HI : GRB_PWM_LO;
+#if defined(RGBW)
+                pwm_buf[i + 48] = (((rgb_buf[6] << i) & 0x80) > 0) ? GRB_PWM_HI : GRB_PWM_LO;
+                pwm_buf[i + 56] = (((rgb_buf[7] << i) & 0x80) > 0) ? GRB_PWM_HI : GRB_PWM_LO;
+#endif
             }
-            else if (ws2812_start == 0)
+            else if (rgb_start == 0)
             {
-                pwm_buf[i] = (((rgb_buf[0] << i) & 0x80) > 0) ?      WS2812_PWM_HI : WS2812_PWM_LO;
-                pwm_buf[i + 8] = (((rgb_buf[1] << i) & 0x80) > 0) ?  WS2812_PWM_HI : WS2812_PWM_LO;
-                pwm_buf[i + 16] = (((rgb_buf[2] << i) & 0x80) > 0) ? WS2812_PWM_HI : WS2812_PWM_LO;
-                pwm_buf[i + 24] = (((rgb_buf[3] << i) & 0x80) > 0) ? WS2812_PWM_HI : WS2812_PWM_LO;
-                pwm_buf[i + 32] = (((rgb_buf[4] << i) & 0x80) > 0) ? WS2812_PWM_HI : WS2812_PWM_LO;
-                pwm_buf[i + 40] = (((rgb_buf[5] << i) & 0x80) > 0) ? WS2812_PWM_HI : WS2812_PWM_LO;
-                pwm_buf[i + 48] = (((rgb_buf[6] << i) & 0x80) > 0) ? WS2812_PWM_HI : WS2812_PWM_LO;
-                pwm_buf[i + 56] = (((rgb_buf[7] << i) & 0x80) > 0) ? WS2812_PWM_HI : WS2812_PWM_LO;
+                pwm_buf[i] = (((rgb_buf[0] << i) & 0x80) > 0) ?      RGB_PWM_HI : RGB_PWM_LO;
+                pwm_buf[i + 8] = (((rgb_buf[1] << i) & 0x80) > 0) ?  RGB_PWM_HI : RGB_PWM_LO;
+                pwm_buf[i + 16] = (((rgb_buf[2] << i) & 0x80) > 0) ? RGB_PWM_HI : RGB_PWM_LO;
+                pwm_buf[i + 24] = (((rgb_buf[3] << i) & 0x80) > 0) ? RGB_PWM_HI : RGB_PWM_LO;
+                pwm_buf[i + 32] = (((rgb_buf[4] << i) & 0x80) > 0) ? RGB_PWM_HI : RGB_PWM_LO;
+                pwm_buf[i + 40] = (((rgb_buf[5] << i) & 0x80) > 0) ? RGB_PWM_HI : RGB_PWM_LO;
+#if defined(RGBW)
+                pwm_buf[i + 48] = (((rgb_buf[6] << i) & 0x80) > 0) ? RGB_PWM_HI : RGB_PWM_LO;
+                pwm_buf[i + 56] = (((rgb_buf[7] << i) & 0x80) > 0) ? RGB_PWM_HI : RGB_PWM_LO;
+#endif
             }
 #else
             // set first transfer from first values
@@ -404,7 +454,7 @@ argb_state argb_show(void)
             pwm_buf[i + 24] = (((rgb_buf[3] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
             pwm_buf[i + 32] = (((rgb_buf[4] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
             pwm_buf[i + 40] = (((rgb_buf[5] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
-#ifdef SK6812
+#ifdef RGBW
             pwm_buf[i + 48] = (((rgb_buf[6] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
             pwm_buf[i + 56] = (((rgb_buf[7] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
 #endif
@@ -444,52 +494,252 @@ static inline uint8_t scale8(uint8_t x, uint8_t scale)
     return ((uint16_t) x * scale) >> 8;
 }
 
-/**
- * @brief Convert color in HSV to RGB
- * @param[in] hue HUE (color) [0..255]
- * @param[in] sat Saturation  [0..255]
- * @param[in] val Value (brightness) [0..255]
- * @param[out] _r Pointer to RED component value
- * @param[out] _g Pointer to GREEN component value
- * @param[out] _b Pointer to BLUE component value
- */
-static void hsv_to_rgb(uint8_t hue, uint8_t sat, uint8_t val, uint8_t *_r, uint8_t *_g, uint8_t *_b) 
+void hsv2rgb_raw(const hsv_t hsv, rgb_t * rgb)
 {
-    if (sat == 0) 
-    { // if white color
-        *_r = *_g = *_b = val;
-        return;
-    }
-    // Float is smoother but check for FPU (Floating point unit) in your MCU
-    // Otherwise it will take longer time in the code
-    // FPU is in: F3/L3 and greater
-    // Src: https://github.com/Inseckto/HSV-to-RGB
-    float h = (float)hue / 255;
-    float s = (float)sat / 255;
-    float v = (float)val / 255;
+    // Convert hue, saturation and brightness ( HSV/HSB ) to RGB
+    // "Dimming" is used on saturation and brightness to make
+    // the output more visually linear.
 
-    int i = (int)floorf(h * 6);
-    float f = h * 6 - (float)i;
-    uint8_t p = (uint8_t)(v * (1 - s) * 255.0);
-    uint8_t q = (uint8_t)(v * (1 - f * s) * 255.0);
-    uint8_t t = (uint8_t)(v * (1 - (1 - f) * s)*255.0);
+    // Apply dimming curves
+    uint8_t value = APPLY_DIMMING( hsv.val);
+    uint8_t saturation = hsv.sat;
 
-    switch (i % 6) 
-    {
-// Src: https://stackoverflow.com/questions/3018313
-//    uint8_t reg = hue / 43;
-//    uint8_t rem = (hue - (reg * 43)) * 6;
-//    uint8_t p = (val * (255 - sat)) >> 8;
-//    uint8_t q = (val * (255 - ((sat * rem) >> 8))) >> 8;
-//    uint8_t t = (val * (255 - ((sat * (255 - rem)) >> 8))) >> 8;
-//    switch (reg) {
-        case 0: *_r = val, *_g = t, *_b = p; break;
-        case 1: *_r = q, *_g = val, *_b = p; break;
-        case 2: *_r = p, *_g = val, *_b = t; break;
-        case 3: *_r = p, *_g = q, *_b = val; break;
-        case 4: *_r = t, *_g = p, *_b = val; break;
-        default: *_r = val, *_g = p, *_b = q; break;
+    // The brightness floor is minimum number that all of
+    // R, G, and B will be set to.
+    uint8_t invsat = APPLY_DIMMING( 255 - saturation);
+    uint8_t brightness_floor = (value * invsat) / 256;
+
+    // The color amplitude is the maximum amount of R, G, and B
+    // that will be added on top of the brightness_floor to
+    // create the specific hue desired.
+    uint8_t color_amplitude = value - brightness_floor;
+
+    // Figure out which section of the hue wheel we're in,
+    // and how far offset we are withing that section
+    uint8_t section = hsv.hue / HSV_SECTION_3; // 0..2
+    uint8_t offset = hsv.hue % HSV_SECTION_3;  // 0..63
+
+    uint8_t rampup = offset; // 0..63
+    uint8_t rampdown = (HSV_SECTION_3 - 1) - offset; // 63..0
+
+    // We now scale rampup and rampdown to a 0-255 range -- at least
+    // in theory, but here's where architecture-specific decsions
+    // come in to play:
+    // To scale them up to 0-255, we'd want to multiply by 4.
+    // But in the very next step, we multiply the ramps by other
+    // values and then divide the resulting product by 256.
+    // So which is faster?
+    //   ((ramp * 4) * othervalue) / 256
+    // or
+    //   ((ramp    ) * othervalue) /  64
+    // It depends on your processor architecture.
+    // On 8-bit AVR, the "/ 256" is just a one-cycle register move,
+    // but the "/ 64" might be a multicycle shift process. So on AVR
+    // it's faster do multiply the ramp values by four, and then
+    // divide by 256.
+    // On ARM, the "/ 256" and "/ 64" are one cycle each, so it's
+    // faster to NOT multiply the ramp values by four, and just to
+    // divide the resulting product by 64 (instead of 256).
+    // Moral of the story: trust your profiler, not your insticts.
+
+    // Since there's an AVR assembly version elsewhere, we'll
+    // assume what we're on an architecture where any number of
+    // bit shifts has roughly the same cost, and we'll remove the
+    // redundant math at the source level:
+
+    //  // scale up to 255 range
+    //  //rampup *= 4; // 0..252
+    //  //rampdown *= 4; // 0..252
+
+    // compute color-amplitude-scaled-down versions of rampup and rampdown
+    uint8_t rampup_amp_adj   = (rampup   * color_amplitude) / (256 / 4);
+    uint8_t rampdown_amp_adj = (rampdown * color_amplitude) / (256 / 4);
+
+    // add brightness_floor offset to everything
+    uint8_t rampup_adj_with_floor   = rampup_amp_adj   + brightness_floor;
+    uint8_t rampdown_adj_with_floor = rampdown_amp_adj + brightness_floor;
+
+
+    if( section ) {
+        if( section == 1) {
+            // section 1: 0x40..0x7F
+            rgb->r = brightness_floor;
+            rgb->g = rampdown_adj_with_floor;
+            rgb->b = rampup_adj_with_floor;
+        } else {
+            // section 2; 0x80..0xBF
+            rgb->r = rampup_adj_with_floor;
+            rgb->g = brightness_floor;
+            rgb->b = rampdown_adj_with_floor;
+        }
+    } else {
+        // section 0: 0x00..0x3F
+        rgb->r = rampdown_adj_with_floor;
+        rgb->g = rampup_adj_with_floor;
+        rgb->b = brightness_floor;
     }
+}
+
+void hsv2rgb_spectrum( const hsv_t hsv, rgb_t * rgb)
+{
+    hsv_t hsv2 = hsv;
+    hsv2.hue = scale8( hsv2.hue, 191);
+    hsv2rgb_raw(hsv2, rgb);
+}
+
+// This function is only an approximation, and it is not
+// nearly as fast as the normal HSV-to-RGB conversion.
+// See extended notes in the .h file.
+hsv_t rgb2hsv_approximate(const rgb_t rgb)
+{
+    uint8_t r = rgb.r;
+    uint8_t g = rgb.g;
+    uint8_t b = rgb.b;
+    uint8_t h, s, v;
+    
+    // find desaturation
+    uint8_t desat = 255;
+    if( r < desat) desat = r;
+    if( g < desat) desat = g;
+    if( b < desat) desat = b;
+    
+    // remove saturation from all channels
+    r -= desat;
+    g -= desat;
+    b -= desat;
+    
+    //uint8_t orig_desat = sqrt16( desat * 256);
+    
+    // saturation is opposite of desaturation
+    s = 255 - desat;
+    
+    if( s != 255 ) {
+        // undo 'dimming' of saturation
+        s = 255 - sqrt16( (255-s) * 256);
+    }
+    // without lib8tion: float ... ew ... sqrt... double ew, or rather, ew ^ 0.5
+    // if( s != 255 ) s = (255 - (256.0 * sqrt( (float)(255-s) / 256.0)));
+    
+    
+    // at least one channel is now zero
+    // if all three channels are zero, we had a
+    // shade of gray.
+    if( (r + g + b) == 0) {
+        // we pick hue zero for no special reason
+        hsv_t hsv = {.h=0, .s=0, .v=255-s};
+        return hsv;
+    }
+    
+    // scale all channels up to compensate for desaturation
+    if( s < 255) {
+        if( s == 0) s = 1;
+        uint32_t scaleup = 65535 / (s);
+        r = ((uint32_t)(r) * scaleup) / 256;
+        g = ((uint32_t)(g) * scaleup) / 256;
+        b = ((uint32_t)(b) * scaleup) / 256;
+    }
+
+    uint16_t total = r + g + b;
+    
+    // scale all channels up to compensate for low values
+    if( total < 255) {
+        if( total == 0) total = 1;
+        uint32_t scaleup = 65535 / (total);
+        r = ((uint32_t)(r) * scaleup) / 256;
+        g = ((uint32_t)(g) * scaleup) / 256;
+        b = ((uint32_t)(b) * scaleup) / 256;
+    }
+    
+    if( total > 255 ) {
+        v = 255;
+    } else {
+        v = qadd8(desat,total);
+        // undo 'dimming' of brightness
+        if( v != 255) v = sqrt16( v * 256);
+        // without lib8tion: float ... ew ... sqrt... double ew, or rather, ew ^ 0.5
+        // if( v != 255) v = (256.0 * sqrt( (float)(v) / 256.0));
+        
+    }
+    
+    // since this wasn't a pure shade of gray,
+    // the interesting question is what hue is it    
+    
+    // start with which channel is highest
+    // (ties don't matter)
+    uint8_t highest = r;
+    if( g > highest) highest = g;
+    if( b > highest) highest = b;
+    
+    if( highest == r ) {
+        // Red is highest.
+        // Hue could be Purple/Pink-Red,Red-Orange,Orange-Yellow
+        if( g == 0 ) {
+            // if green is zero, we're in Purple/Pink-Red
+            h = (HUE_PURPLE + HUE_PURPLE) / 2;
+            h += scale8( qsub8(r, 128), FIXFRAC8(48,128));
+        } else if ( (r - g) > g) {
+            // if R-G > G then we're in Red-Orange
+            h = HUE_RED;
+            h += scale8( g, FIXFRAC8(32,85));
+        } else {
+            // R-G < G, we're in Orange-Yellow
+            h = HUE_YELLOW;
+            h += scale8( qsub8((g - 85) + (171 - r), 4), FIXFRAC8(32,85)); //221
+        }
+        
+    } else if ( highest == g) {
+        // Green is highest
+        // Hue could be Yellow-Green, Green-Aqua
+        if( b == 0) {
+            // if Blue is zero, we're in Yellow-Green
+            //   G = 171..255
+            //   R = 171..  0
+            h = HUE_YELLOW;
+            uint8_t radj = scale8( qsub8(171,r),   47); //171..0 -> 0..171 -> 0..31
+            uint8_t gadj = scale8( qsub8(g,171),   96); //171..255 -> 0..84 -> 0..31;
+            uint8_t rgadj = radj + gadj;
+            uint8_t hueadv = rgadj / 2;
+            h += hueadv;
+            //h += scale8( qadd8( 4, qadd8((g - 128), (128 - r))),
+            //             FIXFRAC8(32,255)); //
+        } else {
+            // if Blue is nonzero we're in Green-Aqua
+            if( (g-b) > b) {
+                h = HUE_GREEN;
+                h += scale8( b, FIXFRAC8(32,85));
+            } else {
+                h = HUE_AQUA;
+                h += scale8( qsub8(b, 85), FIXFRAC8(8,42));
+            }
+        }
+        
+    } else /* highest == b */ {
+        // Blue is highest
+        // Hue could be Aqua/Blue-Blue, Blue-Purple, Purple-Pink
+        if( r == 0) {
+            // if red is zero, we're in Aqua/Blue-Blue
+            h = HUE_AQUA + ((HUE_BLUE - HUE_AQUA) / 4);
+            h += scale8( qsub8(b, 128), FIXFRAC8(24,128));
+        } else if ( (b-r) > r) {
+            // B-R > R, we're in Blue-Purple
+            h = HUE_BLUE;
+            h += scale8( r, FIXFRAC8(32,85));
+        } else {
+            // B-R < R, we're in Purple-Pink
+            h = HUE_PURPLE;
+            h += scale8( qsub8(r, 85), FIXFRAC8(32,85));
+        }
+    }
+    
+    h += 1;
+    hsv_t hsv = {.h=h, .s=s, .v=v};
+    return hsv;
+}
+
+hsv_t argb_get_hue(uint16_t i)
+{
+    rgb_t rgb = {.r=rgb_buf[i], .g=rgb_buf[i+1], .b=rgb_buf[i+2]};
+    return rgb2hsv_approximate(rgb);
 }
 
 /**
@@ -515,23 +765,35 @@ void argb_tim_dma_delay_pulse(void *param, uint32_t flags)
             // fill first part of buffer
             for (volatile uint8_t i = 0; i < 8; i++) 
             {
-#if defined(MIXED_RGB_GRB)
-                if ((buf_counter >= sk6812_start) && (buf_counter <= sk6812_end))
+#if defined(MIXED_RGB_GRB) && defined(RGBW)
+                if ((buf_counter >= grb_start) && (buf_counter <= grb_end))
                 {
-                    pwm_buf[i] = (((rgb_buf[4 * buf_counter] << i) & 0x80) > 0) ?          SK6812_PWM_HI : SK6812_PWM_LO;
-                    pwm_buf[i + 8] = (((rgb_buf[4 * buf_counter + 1] << i) & 0x80) > 0) ?  SK6812_PWM_HI : SK6812_PWM_LO;
-                    pwm_buf[i + 16] = (((rgb_buf[4 * buf_counter + 2] << i) & 0x80) > 0) ? SK6812_PWM_HI : SK6812_PWM_LO;
-                    pwm_buf[i + 24] = (((rgb_buf[4 * buf_counter + 3] << i) & 0x80) > 0)?  SK6812_PWM_HI : SK6812_PWM_LO;
+                    pwm_buf[i] = (((rgb_buf[4 * buf_counter] << i) & 0x80) > 0) ?          GRB_PWM_HI : GRB_PWM_LO;
+                    pwm_buf[i + 8] = (((rgb_buf[4 * buf_counter + 1] << i) & 0x80) > 0) ?  GRB_PWM_HI : GRB_PWM_LO;
+                    pwm_buf[i + 16] = (((rgb_buf[4 * buf_counter + 2] << i) & 0x80) > 0) ? GRB_PWM_HI : GRB_PWM_LO;
+                    pwm_buf[i + 24] = (((rgb_buf[4 * buf_counter + 3] << i) & 0x80) > 0)?  GRB_PWM_HI : GRB_PWM_LO;
                 }
-                else if ((buf_counter >= ws2812_start) && (buf_counter <= ws2812_end))
+                else if ((buf_counter >= rgb_start) && (buf_counter <= rgb_end))
                 {
-                    pwm_buf[i] = (((rgb_buf[4 * buf_counter] << i) & 0x80) > 0) ?          WS2812_PWM_HI : WS2812_PWM_LO;
-                    pwm_buf[i + 8] = (((rgb_buf[4 * buf_counter + 1] << i) & 0x80) > 0) ?  WS2812_PWM_HI : WS2812_PWM_LO;
-                    pwm_buf[i + 16] = (((rgb_buf[4 * buf_counter + 2] << i) & 0x80) > 0) ? WS2812_PWM_HI : WS2812_PWM_LO;
-                    pwm_buf[i + 24] = (((rgb_buf[4 * buf_counter + 3] << i) & 0x80) > 0)?  WS2812_PWM_HI : WS2812_PWM_LO;
+                    pwm_buf[i] = (((rgb_buf[4 * buf_counter] << i) & 0x80) > 0) ?          RGB_PWM_HI : RGB_PWM_LO;
+                    pwm_buf[i + 8] = (((rgb_buf[4 * buf_counter + 1] << i) & 0x80) > 0) ?  RGB_PWM_HI : RGB_PWM_LO;
+                    pwm_buf[i + 16] = (((rgb_buf[4 * buf_counter + 2] << i) & 0x80) > 0) ? RGB_PWM_HI : RGB_PWM_LO;
+                    pwm_buf[i + 24] = (((rgb_buf[4 * buf_counter + 3] << i) & 0x80) > 0)?  RGB_PWM_HI : RGB_PWM_LO;
                 }
-#else
-#ifdef SK6812
+#elif defined(MIXED_RGB_GRB) && !defined(RGBW)
+                if ((buf_counter >= grb_start) && (buf_counter <= grb_end))
+                {
+                    pwm_buf[i] = (((rgb_buf[3 * buf_counter] << i) & 0x80) > 0) ?          GRB_PWM_HI : GRB_PWM_LO;
+                    pwm_buf[i + 8] = (((rgb_buf[3 * buf_counter + 1] << i) & 0x80) > 0) ?  GRB_PWM_HI : GRB_PWM_LO;
+                    pwm_buf[i + 16] = (((rgb_buf[3 * buf_counter + 2] << i) & 0x80) > 0) ? GRB_PWM_HI : GRB_PWM_LO;
+                }
+                else if ((buf_counter >= rgb_start) && (buf_counter <= rgb_end))
+                {
+                    pwm_buf[i] = (((rgb_buf[3 * buf_counter] << i) & 0x80) > 0) ?          RGB_PWM_HI : RGB_PWM_LO;
+                    pwm_buf[i + 8] = (((rgb_buf[3 * buf_counter + 1] << i) & 0x80) > 0) ?  RGB_PWM_HI : RGB_PWM_LO;
+                    pwm_buf[i + 16] = (((rgb_buf[3 * buf_counter + 2] << i) & 0x80) > 0) ? RGB_PWM_HI : RGB_PWM_LO;
+                }
+#elif defined(RGBW)
                 pwm_buf[i] = (((rgb_buf[4 * buf_counter] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
                 pwm_buf[i + 8] = (((rgb_buf[4 * buf_counter + 1] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
                 pwm_buf[i + 16] = (((rgb_buf[4 * buf_counter + 2] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
@@ -540,7 +802,6 @@ void argb_tim_dma_delay_pulse(void *param, uint32_t flags)
                 pwm_buf[i] = (((rgb_buf[3 * buf_counter] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
                 pwm_buf[i + 8] = (((rgb_buf[3 * buf_counter + 1] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
                 pwm_buf[i + 16] = (((rgb_buf[3 * buf_counter + 2] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
-#endif
 #endif
             }
             buf_counter++;
@@ -559,32 +820,43 @@ void argb_tim_dma_delay_pulse(void *param, uint32_t flags)
             // fill second part of buffer
             for (volatile uint8_t i = 0; i < 8; i++) 
             {
-#if defined(MIXED_RGB_GRB)
-                if ((buf_counter >= sk6812_start) && (buf_counter <= sk6812_end))
+#if defined(MIXED_RGB_GRB) && defined(RGBW)
+                if ((buf_counter >= grb_start) && (buf_counter <= grb_end))
                 {
-                    pwm_buf[i + 32] = (((rgb_buf[4 * buf_counter] << i) & 0x80) > 0) ?     SK6812_PWM_HI : SK6812_PWM_LO;
-                    pwm_buf[i + 40] = (((rgb_buf[4 * buf_counter + 1] << i) & 0x80) > 0) ? SK6812_PWM_HI : SK6812_PWM_LO;
-                    pwm_buf[i + 48] = (((rgb_buf[4 * buf_counter + 2] << i) & 0x80) > 0) ? SK6812_PWM_HI : SK6812_PWM_LO;
-                    pwm_buf[i + 56] = (((rgb_buf[4 * buf_counter + 3] << i) & 0x80) > 0) ? SK6812_PWM_HI : SK6812_PWM_LO;
+                    pwm_buf[i + 32] = (((rgb_buf[4 * buf_counter] << i) & 0x80) > 0) ?     GRB_PWM_HI : GRB_PWM_LO;
+                    pwm_buf[i + 40] = (((rgb_buf[4 * buf_counter + 1] << i) & 0x80) > 0) ? GRB_PWM_HI : GRB_PWM_LO;
+                    pwm_buf[i + 48] = (((rgb_buf[4 * buf_counter + 2] << i) & 0x80) > 0) ? GRB_PWM_HI : GRB_PWM_LO;
+                    pwm_buf[i + 56] = (((rgb_buf[4 * buf_counter + 3] << i) & 0x80) > 0) ? GRB_PWM_HI : GRB_PWM_LO;
                 }
-                else if ((buf_counter >= ws2812_start) && (buf_counter <= ws2812_end))
+                else if ((buf_counter >= rgb_start) && (buf_counter <= rgb_end))
                 {
-                    pwm_buf[i + 32] = (((rgb_buf[4 * buf_counter] << i) & 0x80) > 0) ?     WS2812_PWM_HI : WS2812_PWM_LO;
-                    pwm_buf[i + 40] = (((rgb_buf[4 * buf_counter + 1] << i) & 0x80) > 0) ? WS2812_PWM_HI : WS2812_PWM_LO;
-                    pwm_buf[i + 48] = (((rgb_buf[4 * buf_counter + 2] << i) & 0x80) > 0) ? WS2812_PWM_HI : WS2812_PWM_LO;
-                    pwm_buf[i + 56] = (((rgb_buf[4 * buf_counter + 3] << i) & 0x80) > 0) ? WS2812_PWM_HI : WS2812_PWM_LO;
+                    pwm_buf[i + 32] = (((rgb_buf[4 * buf_counter] << i) & 0x80) > 0) ?     RGB_PWM_HI : RGB_PWM_LO;
+                    pwm_buf[i + 40] = (((rgb_buf[4 * buf_counter + 1] << i) & 0x80) > 0) ? RGB_PWM_HI : RGB_PWM_LO;
+                    pwm_buf[i + 48] = (((rgb_buf[4 * buf_counter + 2] << i) & 0x80) > 0) ? RGB_PWM_HI : RGB_PWM_LO;
+                    pwm_buf[i + 56] = (((rgb_buf[4 * buf_counter + 3] << i) & 0x80) > 0) ? RGB_PWM_HI : RGB_PWM_LO;
                 }
-#else
-#ifdef SK6812
+#elif defined(MIXED_RGB_GRB) && !defined(RGBW)
+                if ((buf_counter >= grb_start) && (buf_counter <= grb_end))
+                {
+                    pwm_buf[i + 24] = (((rgb_buf[3 * buf_counter] << i) & 0x80) > 0) ?     GRB_PWM_HI : GRB_PWM_LO;
+                    pwm_buf[i + 32] = (((rgb_buf[3 * buf_counter + 1] << i) & 0x80) > 0) ? GRB_PWM_HI : GRB_PWM_LO;
+                    pwm_buf[i + 40] = (((rgb_buf[3 * buf_counter + 2] << i) & 0x80) > 0) ? GRB_PWM_HI : GRB_PWM_LO;
+                }
+                else if ((buf_counter >= rgb_start) && (buf_counter <= rgb_end))
+                {
+                    pwm_buf[i + 24] = (((rgb_buf[3 * buf_counter] << i) & 0x80) > 0) ?     RGB_PWM_HI : RGB_PWM_LO;
+                    pwm_buf[i + 32] = (((rgb_buf[3 * buf_counter + 1] << i) & 0x80) > 0) ? RGB_PWM_HI : RGB_PWM_LO;
+                    pwm_buf[i + 40] = (((rgb_buf[3 * buf_counter + 2] << i) & 0x80) > 0) ? RGB_PWM_HI : RGB_PWM_LO;
+                }
+#elif defined(RGBW)
                 pwm_buf[i + 32] = (((rgb_buf[4 * buf_counter] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
                 pwm_buf[i + 40] = (((rgb_buf[4 * buf_counter + 1] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
                 pwm_buf[i + 48] = (((rgb_buf[4 * buf_counter + 2] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
                 pwm_buf[i + 56] = (((rgb_buf[4 * buf_counter + 3] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
 #else
-                pwm_buf[i + 24] = (((rgb_buf[3 * buf_counter] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
+                pwm_buf[i + 24] = (((rgb_buf[3 * buf_counter] << i) & 0x80) > 0) ?     PWM_HI : PWM_LO;
                 pwm_buf[i + 32] = (((rgb_buf[3 * buf_counter + 1] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
                 pwm_buf[i + 40] = (((rgb_buf[3 * buf_counter + 2] << i) & 0x80) > 0) ? PWM_HI : PWM_LO;
-#endif
 #endif
             }
             buf_counter++;
