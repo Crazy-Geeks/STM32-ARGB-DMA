@@ -103,20 +103,20 @@ typedef struct {
 
 typedef enum 
 {
-    // HUE_RED    = 0,
-    // HUE_YELLOW = 42,
-    // HUE_GREEN  = 85,
-    // HUE_AQUA   = 128,
-    // HUE_BLUE   = 171,
-    // HUE_PURPLE = 213
-    HUE_RED = 0,
-    HUE_ORANGE = 32,
-    HUE_YELLOW = 64,
-    HUE_GREEN = 96,
-    HUE_AQUA = 128,
-    HUE_BLUE = 160,
-    HUE_PURPLE = 192,
-    HUE_PINK = 224
+    HUE_RED    = 0,
+    HUE_YELLOW = 42,
+    HUE_GREEN  = 85,
+    HUE_AQUA   = 128,
+    HUE_BLUE   = 171,
+    HUE_PURPLE = 213
+    // HUE_RED = 0,
+    // HUE_ORANGE = 32,
+    // HUE_YELLOW = 64,
+    // HUE_GREEN = 96,
+    // HUE_AQUA = 128,
+    // HUE_BLUE = 160,
+    // HUE_PURPLE = 192,
+    // HUE_PINK = 224
 } hsv_hue;
 
 void argb_init(void);   // Initialization

@@ -110,21 +110,21 @@ typedef uint32_t dma_siz;
 #endif
 
 #if defined(WS2812)
-#define WS2812_PWM_HI (uint8_t) (ARR_VAL * (0.583 + LED_SIGNAL_RISE_DELAY_US)) - 1     // Log.1 - 56% - 0.70us
-#define WS2812_PWM_LO (uint8_t) (ARR_VAL * (0.2916 + LED_SIGNAL_RISE_DELAY_US)) - 1     // Log.0 - 28% - 0.35us
+#define WS2812_PWM_HI (uint8_t) (ARR_VAL * (0.56 + LED_SIGNAL_RISE_DELAY_US)) - 1     // Log.1 - 56% - 0.70us
+#define WS2812_PWM_LO (uint8_t) (ARR_VAL * (0.28 + LED_SIGNAL_RISE_DELAY_US)) - 1     // Log.0 - 28% - 0.35us
 
 #if defined(MIXED_RGB_GRB)
-#define GRB_PWM_HI WS2811_PWM_HI
-#define GRB_PWM_LO WS2811_PWM_LO
+#define GRB_PWM_HI WS2812_PWM_HI
+#define GRB_PWM_LO WS2812_PWM_LO
 #else
-#define PWM_HI WS2811_PWM_HI
-#define PWM_LO WS2811_PWM_LO
+#define PWM_HI WS2812_PWM_HI
+#define PWM_LO WS2812_PWM_LO
 #endif
 #endif
 
 #if defined(SK6812)
-#define SK6812_PWM_HI (uint8_t) (ARR_VAL * (0.5 + LED_SIGNAL_RISE_DELAY_US)) - 1     // Log.1 - 48% - 0.60us
-#define SK6812_PWM_LO (uint8_t) (ARR_VAL * (0.25 + LED_SIGNAL_RISE_DELAY_US)) - 1     // Log.0 - 24% - 0.30us
+#define SK6812_PWM_HI (uint8_t) (ARR_VAL * (0.48 + LED_SIGNAL_RISE_DELAY_US)) - 1     // Log.1 - 48% - 0.60us
+#define SK6812_PWM_LO (uint8_t) (ARR_VAL * (0.24 + LED_SIGNAL_RISE_DELAY_US)) - 1     // Log.0 - 24% - 0.30us
 
 #if defined(MIXED_RGB_GRB)
 #define GRB_PWM_HI SK6812_PWM_HI
@@ -675,7 +675,7 @@ hsv_t rgb2hsv_approximate(const rgb_t rgb)
         // Hue could be Purple/Pink-Red,Red-Orange,Orange-Yellow
         if( g == 0 ) {
             // if green is zero, we're in Purple/Pink-Red
-            h = (HUE_PURPLE + HUE_PINK) / 2;
+            h = (HUE_PURPLE + HUE_PURPLE) / 2;
             h += scale8( qsub8(r, 128), FIXFRAC8(48,128));
         } else if ( (r - g) > g) {
             // if R-G > G then we're in Red-Orange
@@ -683,7 +683,7 @@ hsv_t rgb2hsv_approximate(const rgb_t rgb)
             h += scale8( g, FIXFRAC8(32,85));
         } else {
             // R-G < G, we're in Orange-Yellow
-            h = HUE_ORANGE;
+            h = HUE_YELLOW;
             h += scale8( qsub8((g - 85) + (171 - r), 4), FIXFRAC8(32,85)); //221
         }
         
