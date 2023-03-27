@@ -245,8 +245,9 @@ void argb_set_rgb(uint16_t i, uint8_t r, uint8_t g, uint8_t b)
 {
     // overflow protection
     if (i >= NUM_PIXELS) {
-        uint16_t _i = i / NUM_PIXELS;
-        i -= _i * NUM_PIXELS;
+        // uint16_t _i = i / NUM_PIXELS;
+        // i -= _i * NUM_PIXELS;
+        return;
     }
     // set brightness
     r /= 256 / ((uint16_t) argb_brightness + 1);
