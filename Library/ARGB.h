@@ -138,6 +138,7 @@ void argb_fill_white(uint8_t w); // Fill all strip's white component (RGBW)
 void hsv2rgb_spectrum( const hsv_t hsv, rgb_t * rgb);
 
 hsv_t argb_get_hue(uint16_t i);
+rgb_t argb_get_rgb(uint16_t i);
 
 argb_state argb_ready(void); // Get DMA Ready state
 argb_state argb_show(void); // Push data to the strip

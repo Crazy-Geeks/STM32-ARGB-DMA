@@ -743,6 +743,12 @@ hsv_t argb_get_hue(uint16_t i)
     return rgb2hsv_approximate(rgb);
 }
 
+rgb_t argb_get_rgb(uint16_t i)
+{
+    rgb_t rgb = {.r=rgb_buf[i], .g=rgb_buf[i+1], .b=rgb_buf[i+2]};
+    return rgb;
+}
+
 /**
   * @brief  TIM DMA Delay Pulse callback.
   * @param  dummy param, null ptr
